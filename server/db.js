@@ -1,9 +1,14 @@
+process.env.PGTZ = 'UTC'; // Force Postgres to treat timestamps as UTC
 const { Pool } = require('pg');
 require('dotenv').config();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false } // Required for Supabase
+});
+
+pool.on('connect', (client) => {
+    client.query("SET TIME ZONE 'UTC'");
 });
 
 // Create tables
@@ -50,6 +55,9 @@ const createTables = async () => {
 
             -- Migration for existing users table
             ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash TEXT;
+
+            -- Migration for messages table
+            ALTER TABLE messages ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'sent'; -- sent, delivered, seen
         `);
         console.log("Tables created successfully");
     } catch (err) {

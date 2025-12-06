@@ -58,7 +58,7 @@ const renderEmoji = (text) => {
     return elements;
 };
 
-export default function MessageList({ messages, currentUser, roomId }) {
+export default function MessageList({ messages, currentUser, roomId, socket }) {
     const [showScrollButton, setShowScrollButton] = useState(false);
     const scrollRef = useRef(null);
     const bottomRef = useRef(null);
@@ -68,6 +68,28 @@ export default function MessageList({ messages, currentUser, roomId }) {
     useEffect(() => {
         shouldScrollToBottom.current = true;
     }, [roomId]);
+
+    // Mark messages as seen
+    useEffect(() => {
+        if (!socket || !messages.length) return;
+
+        const unseenIds = messages
+            .filter(m => !m.isMe && m.status !== 'seen' && m.user_id !== currentUser.id && m.type !== 'system')
+            .map(m => m.id);
+
+        if (unseenIds.length > 0) {
+            // Emit mark_seen event
+            socket.emit('mark_seen', { roomId, messageIds: unseenIds });
+            
+            // Note: Optimistic update for 'seen' isn't strictly necessary if backend broadcasts update
+            // But we could do it here if we wanted instant feedback.
+            // For now rely on server broadcast 'messages_status_update' (handled in ChatWindow if implemented there, 
+            // or we need to update messages prop from parent. 
+            // Wait, MessageList receives messages from props. 
+            // ChatWindow needs to handle 'messages_status_update' to update state.
+            // I should add that listener to ChatWindow!)
+        }
+    }, [messages, socket, roomId, currentUser.id]);
 
     // Auto-scroll on new messages if near bottom or if it's the first load
     useEffect(() => {
@@ -138,7 +160,7 @@ export default function MessageList({ messages, currentUser, roomId }) {
                                         {msg.content}
                                     </span>
                                     <span className="text-[10px] text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">
-                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                     </span>
                                 </div>
                             </div>
@@ -167,10 +189,28 @@ export default function MessageList({ messages, currentUser, roomId }) {
                                     }
                                 `}>
                                     {renderEmoji(msg.content)}
+                                    
+                                    {/* Status Icon (Only for own messages) */}
+                                    {isMe && (
+                                        <span className="inline-block ml-2 align-middle">
+                                            {msg.status === 'sending' && (
+                                                <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>
+                                            )}
+                                            {msg.status === 'sent' && ( // Default DB status
+                                                <span className="material-symbols-outlined text-[12px]">check</span>
+                                            )}
+                                            {msg.status === 'delivered' && ( // If we implement delivered
+                                                <span className="material-symbols-outlined text-[12px]">check_circle</span> 
+                                            )}
+                                            {msg.status === 'seen' && (
+                                                <span className="material-symbols-outlined text-[12px] text-white font-bold filled">check_circle</span>
+                                            )}
+                                        </span>
+                                    )}
                                 </div>
                                 
-                                <div className={`text-[10px] mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity select-none ${isMe ? 'text-slate-500' : 'text-slate-500'}`}>
-                                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                <div className={`text-[10px] mt-1 px-1 opacity-0 ${msg.status !== 'sending' ? 'group-hover:opacity-100' : ''} transition-opacity select-none ${isMe ? 'text-slate-500' : 'text-slate-500'}`}>
+                                    {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                 </div>
                             </div>
                         </div>

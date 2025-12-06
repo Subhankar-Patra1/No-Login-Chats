@@ -107,7 +107,9 @@ io.on('connection', async (socket) => {
 
             if (member) {
                 const insertRes = await db.query(
-                    'INSERT INTO messages (room_id, user_id, content) VALUES ($1, $2, $3) RETURNING id',
+                    `INSERT INTO messages (room_id, user_id, content) 
+                     VALUES ($1, $2, $3) 
+                     RETURNING id, status, to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at`,
                     [roomId, socket.user.id, content]
                 );
                 const info = insertRes.rows[0];
@@ -121,18 +123,45 @@ io.on('connection', async (socket) => {
                     room_id: roomId,
                     user_id: socket.user.id,
                     content,
-                    created_at: new Date().toISOString(),
+                    status: info.status,
+                    status: info.status,
+                    created_at: info.created_at,
                     username: socket.user.username,
                     display_name: user ? user.display_name : socket.user.display_name
                 };
 
-                console.log(`Emitting new_message to room:${roomId}`, message);
                 io.to(`room:${roomId}`).emit('new_message', message);
             } else {
                 console.log(`User ${socket.user.username} tried to send message to room ${roomId} but is not a member`);
             }
         } catch (err) {
             console.error('Error sending message:', err);
+        }
+    });
+
+    socket.on('mark_seen', async ({ roomId, messageIds }) => {
+        try {
+            // Verify membership
+            const memberRes = await db.query('SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, socket.user.id]);
+            if (!memberRes.rows[0]) return;
+
+            // Update status to 'seen' for messages in this room, not sent by this user
+            // In a real app, we might check messageIds specifically.
+            // For simplicity, let's update specific IDs if provided, or "all unseen" logic.
+            // Let's assume the client sends the ID of the latest message they saw?
+            // Or a list of IDs.
+            
+            if (messageIds && messageIds.length > 0) {
+                 await db.query(
+                    'UPDATE messages SET status = $1 WHERE id = ANY($2) AND room_id = $3 AND user_id != $4',
+                    ['seen', messageIds, roomId, socket.user.id]
+                );
+                
+                // Broadcast update
+                io.to(`room:${roomId}`).emit('messages_status_update', { messageIds, status: 'seen', roomId });
+            }
+        } catch (err) {
+            console.error('Error marking seen:', err);
         }
     });
 

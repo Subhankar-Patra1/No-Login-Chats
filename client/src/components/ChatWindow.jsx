@@ -48,21 +48,62 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         const handleNewMessage = (msg) => {
             console.log('Received new_message:', msg, 'Current room:', room.id);
             if (msg.room_id === room.id) {
-                setMessages(prev => [...prev, msg]);
+                setMessages(prev => {
+                    // Check for optimistic message to replace
+                    // We match by content and user_id, ensuring unique replacement if possible
+                    // Ideally we'd use a tempId from client, but purely content matching for now is "okay" for this scope
+                    // taking the last one that matches
+                    const reversedIndex = [...prev].reverse().findIndex(m => 
+                        m.status === 'sending' && 
+                        m.content === msg.content && 
+                        m.user_id === msg.user_id
+                    );
+                    
+                    if (reversedIndex !== -1) {
+                        const index = prev.length - 1 - reversedIndex;
+                        const newMsgs = [...prev];
+                        newMsgs[index] = msg; // Replace with real message
+                        return newMsgs;
+                    }
+                    return [...prev, msg];
+                });
             } else {
                 console.log('Message not for this room');
             }
         };
 
+        const handleStatusUpdate = ({ messageIds, status, roomId }) => {
+            if (roomId === room.id) {
+                setMessages(prev => prev.map(msg => 
+                    messageIds.includes(msg.id) ? { ...msg, status } : msg
+                ));
+            }
+        };
+
         socket.on('new_message', handleNewMessage);
+        socket.on('messages_status_update', handleStatusUpdate);
 
         return () => {
             socket.off('new_message', handleNewMessage);
+            socket.off('messages_status_update', handleStatusUpdate);
         };
     }, [socket, room, token]);
 
     const handleSend = (content) => {
         if (socket && !isExpired) {
+            // Optimistic Update
+            const tempMsg = {
+                id: `temp-${Date.now()}`,
+                room_id: room.id,
+                user_id: user.id,
+                content,
+                created_at: new Date().toISOString(),
+                username: user.username,
+                display_name: user ? user.display_name : 'Me',
+                status: 'sending'
+            };
+            setMessages(prev => [...prev, tempMsg]);
+            
             socket.emit('send_message', { roomId: room.id, content });
         }
     };
@@ -94,7 +135,9 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                         )}
                     </h2>
                     {room.type === 'direct' && room.username && (
-                        <p className="text-xs text-slate-400 font-medium">@{room.username}</p>
+                        <p className="text-xs text-slate-400 font-medium">
+                            {room.username.startsWith('@') ? room.username : `@${room.username}`}
+                        </p>
                     )}
 
                     {room.expires_at && (
@@ -118,7 +161,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 )}
             </div>
 
-            <MessageList messages={messages} currentUser={user} roomId={room.id} />
+            <MessageList messages={messages} currentUser={user} roomId={room.id} socket={socket} />
             
             <MessageInput onSend={handleSend} disabled={isExpired} />
 

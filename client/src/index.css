@@ -127,3 +127,7 @@
 .animate-pulse-line {
   animation: pulse-line 1.5s ease-in-out infinite alternate;
 }
+
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1;
+}

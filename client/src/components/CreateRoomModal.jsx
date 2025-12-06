@@ -144,7 +144,9 @@ export default function CreateRoomModal({ onClose, onCreate }) {
                                                 </div>
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium text-white truncate">{user.display_name}</p>
-                                                    <p className="text-xs text-slate-400 truncate">@{user.username}</p>
+                                                    <p className="text-xs text-slate-400 truncate">
+                                                        {user.username.startsWith('@') ? user.username : `@${user.username}`}
+                                                    </p>
                                                 </div>
                                             </button>
                                         ))}
@@ -160,7 +162,9 @@ export default function CreateRoomModal({ onClose, onCreate }) {
                                         </div>
                                         <div>
                                             <p className="text-sm font-medium text-white">{selectedUser.display_name}</p>
-                                            <p className="text-xs text-slate-400">@{selectedUser.username}</p>
+                                            <p className="text-xs text-slate-400">
+                                                {selectedUser.username.startsWith('@') ? selectedUser.username : `@${selectedUser.username}`}
+                                            </p>
                                         </div>
                                     </div>
                                     <button 
