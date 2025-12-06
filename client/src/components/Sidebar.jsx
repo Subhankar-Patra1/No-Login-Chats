@@ -18,7 +18,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, onCreateRoom,
                     <div>
                         <h2 className="font-bold text-slate-100 truncate max-w-[100px]">{user.display_name}</h2>
                         <div className="flex items-center gap-1">
-                            <p className="text-xs text-slate-400 font-medium">@{user.username}</p>
+                            <p className="text-xs text-slate-400 font-medium">{user.username}</p>
                             <button 
                                 onClick={() => setShowShareProfile(true)}
                                 className="text-slate-500 hover:text-white transition-colors"

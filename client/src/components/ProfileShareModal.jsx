@@ -18,7 +18,7 @@ export default function ProfileShareModal({ user, onClose }) {
                 <div className="p-6 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/50">
                     <div>
                         <h3 className="text-xl font-bold text-white mb-1">Share Profile</h3>
-                        <p className="text-xs text-slate-400">@{user.username}</p>
+                        <p className="text-xs text-slate-400">{user.username}</p>
                     </div>
                     <button onClick={onClose} className="p-2 -mr-2 text-slate-400 hover:text-white transition-colors rounded-full">
                         <span className="material-symbols-outlined">close</span>

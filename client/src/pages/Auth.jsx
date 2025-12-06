@@ -16,7 +16,7 @@ export default function Auth() {
 
     // Debounce Username Check
     useEffect(() => {
-        if (isLogin || !formData.username) {
+        if (isLogin || !formData.username || formData.username === '@') {
             setUsernameStatus('idle');
             return;
         }
@@ -38,7 +38,19 @@ export default function Auth() {
 
     // Password Validation
     useEffect(() => {
-        setPasswordValid(formData.password.length >= 6);
+        const hasUpperCase = /[A-Z]/.test(formData.password);
+        const hasLowerCase = /[a-z]/.test(formData.password);
+        const hasNumber = /[0-9]/.test(formData.password);
+        const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
+        const hasMinLength = formData.password.length >= 8;
+
+        setPasswordValid(
+            hasUpperCase && 
+            hasLowerCase && 
+            hasNumber && 
+            hasSpecialChar && 
+            hasMinLength
+        );
     }, [formData.password]);
 
     const handleSubmit = async (e) => {
@@ -47,7 +59,7 @@ export default function Auth() {
 
         if (!isLogin) {
             if (usernameStatus === 'taken') return setError('Username is already taken');
-            if (!passwordValid) return setError('Password must be at least 6 characters');
+            if (!passwordValid) return setError('Password does not meet all requirements');
         }
         
         const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
@@ -92,9 +104,9 @@ export default function Auth() {
     };
 
     return (
-        <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-slate-950">
+        <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-slate-950 overflow-hidden">
             {/* Left Side - Visual */}
-            <div className="relative hidden lg:flex flex-col items-center justify-center p-12 overflow-hidden bg-slate-900">
+            <div className="relative hidden lg:flex flex-col items-center justify-center p-12 overflow-hidden bg-slate-900 h-full">
                 {/* Abstract Background */}
                 <div className="absolute inset-0 w-full h-full">
                     <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-violet-600/20 rounded-full blur-[120px] animate-pulse" />
@@ -124,8 +136,9 @@ export default function Auth() {
             </div>
 
             {/* Right Side - Form */}
-            <div className="flex items-center justify-center p-6 lg:p-12 bg-slate-950 relative">
-                <div className="w-full max-w-md space-y-8">
+            <div className="h-full overflow-y-auto bg-slate-950 relative custom-scrollbar">
+                <div className="min-h-full flex items-center justify-center p-6 lg:p-12">
+                    <div className="w-full max-w-md space-y-8">
                     <div className="text-center lg:text-left">
                         <h2 className="text-3xl font-bold text-white mb-2">
                             {isLogin ? 'Welcome Back' : 'Create Account'}
@@ -170,9 +183,12 @@ export default function Auth() {
                                         !isLogin && usernameStatus === 'taken' ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20' :
                                         'border-slate-800 focus:border-violet-500/50 focus:ring-violet-500/50'
                                     }`}
-                                    placeholder="johndoe"
+                                    placeholder="@johndoe"
                                     value={formData.username}
-                                    onChange={e => setFormData({...formData, username: e.target.value})}
+                                    onChange={e => {
+                                        const value = e.target.value.replace(/@/g, '');
+                                        setFormData({...formData, username: value ? '@' + value : '@'});
+                                    }}
                                     required
                                 />
                                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">person</span>
@@ -235,10 +251,33 @@ export default function Auth() {
                                     </div>
                                 )}
                             </div>
-                            <p className={`text-xs flex items-center gap-1 transition-colors ${!isLogin && formData.password ? (passwordValid ? 'text-green-400' : 'text-slate-500') : 'text-slate-500'}`}>
-                                <span className="material-symbols-outlined text-[10px]">info</span>
-                                Must be at least 6 characters long.
-                            </p>
+                            
+                            {/* Password Requirements Checklist */}
+                            {!isLogin && (
+                                <div className="mt-3 space-y-2 bg-slate-900/50 p-4 rounded-xl border border-slate-800/50">
+                                    <p className="text-xs font-medium text-slate-400 mb-2">Password Requirements:</p>
+                                    {[
+                                        { label: 'One uppercase letter', valid: /[A-Z]/.test(formData.password) },
+                                        { label: 'One lowercase letter', valid: /[a-z]/.test(formData.password) },
+                                        { label: 'One number', valid: /[0-9]/.test(formData.password) },
+                                        { label: 'One special character', valid: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password) },
+                                        { label: 'Minimum 8 characters', valid: formData.password.length >= 8 }
+                                    ].map((rule, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-xs transition-colors duration-200">
+                                            <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${
+                                                rule.valid 
+                                                    ? 'bg-green-500/10 border-green-500/50 text-green-500' 
+                                                    : 'bg-slate-800 border-slate-700 text-slate-600'
+                                            }`}>
+                                                {rule.valid && <span className="material-symbols-outlined text-[10px] font-bold">check</span>}
+                                            </div>
+                                            <span className={rule.valid ? 'text-green-400' : 'text-slate-500'}>
+                                                {rule.label}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         
                         <button 
@@ -270,6 +309,7 @@ export default function Auth() {
                             </button>
                         </p>
                     </div>
+                </div>
                 </div>
             </div>
         </div>
