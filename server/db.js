@@ -15,6 +15,7 @@ const createTables = async () => {
                 username TEXT UNIQUE NOT NULL,
                 display_name TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
+                recovery_code_hash TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -45,6 +46,10 @@ const createTables = async () => {
                 type TEXT DEFAULT 'text',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+
+            -- Migration for existing users table
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash TEXT;
         `);
         console.log("Tables created successfully");
     } catch (err) {

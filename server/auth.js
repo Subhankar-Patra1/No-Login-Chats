@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
+const crypto = require('crypto');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
@@ -16,16 +17,24 @@ router.post('/signup', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         
+        // Generate Recovery Code
+        const recoveryCode = `RECOVERY-${crypto.randomBytes(4).toString('hex').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+        const recoveryCodeHash = await bcrypt.hash(recoveryCode, 10);
+
         // Postgres: Use RETURNING id to get the inserted ID
         const result = await db.query(
-            'INSERT INTO users (username, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
-            [username, displayName, hashedPassword]
+            'INSERT INTO users (username, display_name, password_hash, recovery_code_hash) VALUES ($1, $2, $3, $4) RETURNING id',
+            [username, displayName, hashedPassword, recoveryCodeHash]
         );
         
         const newUserId = result.rows[0].id;
         
         const token = jwt.sign({ id: newUserId, username, display_name: displayName }, JWT_SECRET);
-        res.json({ token, user: { id: newUserId, username, display_name: displayName } });
+        res.json({ 
+            token, 
+            user: { id: newUserId, username, display_name: displayName },
+            recoveryCode // Return only once
+        });
     } catch (error) {
         // Postgres unique violation code is 23505
         if (error.code === '23505') {
@@ -51,6 +60,36 @@ router.post('/login', async (req, res) => {
         res.json({ token, user: { id: user.id, username: user.username, display_name: user.display_name } });
     } catch (error) {
         console.error("Login error:", error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+router.post('/recover-account', async (req, res) => {
+    const { username, recoveryCode, newPassword } = req.body;
+
+    if (!username || !recoveryCode || !newPassword) {
+        return res.status(400).json({ error: 'Missing fields' });
+    }
+
+    try {
+        const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+        const user = rows[0];
+
+        if (!user || user.recovery_code_hash === null) {
+            return res.status(401).json({ error: 'Invalid information' });
+        }
+
+        const isMatch = await bcrypt.compare(recoveryCode, user.recovery_code_hash);
+        if (!isMatch) {
+            return res.status(401).json({ error: 'Invalid recovery code' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, user.id]);
+
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (error) {
+        console.error("Recovery error:", error);
         res.status(500).json({ error: 'Server error' });
     }
 });
