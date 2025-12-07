@@ -11,7 +11,9 @@
 - **⏲️ Ephemeral Groups**: Group chat rooms automatically expire and delete after 48 hours.
 - **👥 Direct Messaging**: Private one-on-one chats with other users.
 - **🔗 Smart Invites**: Share rooms via unique codes or direct links (QR codes included!).
-- **📱 Fully Responsive**: a beautiful, mobile-first interface built with TailwindCSS.
+- **� Enhanced Chat Actions**: Reply to messages (with preview), copy text, and delete messages (for yourself or everyone).
+- **📝 Rich Text Support**: Preserves code blocks, indentation, and newlines exactly as typed.
+- **�📱 Fully Responsive**: a beautiful, mobile-first interface built with TailwindCSS.
 - **🛡️ Secure**: JWT-based authentication and PostgreSQL persistence.
 
 ## 🛠️ Tech Stack
