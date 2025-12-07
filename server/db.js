@@ -2,26 +2,59 @@ process.env.PGTZ = 'UTC'; // Force Postgres to treat timestamps as UTC
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Required for Supabase
-});
+const dns = require('dns');
+const url = require('url');
 
+let pool;
 
-pool.on('connect', (client) => {
-    client.query("SET TIME ZONE 'UTC'");
-});
+const getPool = async () => {
+    if (pool) return pool;
 
-// Add error handling for idle clients
-pool.on('error', (err, client) => {
-    console.error('Unexpected error on idle client', err);
-    process.exit(-1);
-});
+    const dbUrl = process.env.DATABASE_URL;
+    const params = url.parse(dbUrl);
+    const hostname = params.hostname;
+
+    return new Promise((resolve) => {
+        dns.resolve4(hostname, (err, addresses) => {
+            if (err) {
+                console.error('DNS Resolution failed, using original URL:', err);
+                pool = new Pool({
+                    connectionString: dbUrl,
+                    ssl: { rejectUnauthorized: false }
+                });
+            } else {
+                const ip = addresses[0];
+                console.log(`Resolved ${hostname} to ${ip}`);
+                const config = {
+                    user: params.auth.split(':')[0],
+                    password: params.auth.split(':')[1],
+                    host: ip,
+                    port: params.port,
+                    database: params.pathname.split('/')[1],
+                    ssl: { rejectUnauthorized: false }
+                };
+                pool = new Pool(config);
+            }
+
+            pool.on('connect', (client) => {
+                client.query("SET TIME ZONE 'UTC'");
+            });
+
+            pool.on('error', (err, client) => {
+                console.error('Unexpected error on idle client', err);
+                process.exit(-1);
+            });
+
+            resolve(pool);
+        });
+    });
+};
 
 // Create tables
 const createTables = async () => {
     try {
-        await pool.query(`
+        const p = await getPool();
+        await p.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -79,5 +112,8 @@ const createTables = async () => {
 createTables();
 
 module.exports = {
-    query: (text, params) => pool.query(text, params),
+    query: async (text, params) => {
+        const p = await getPool();
+        return p.query(text, params);
+    },
 };
