@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import ProfileShareModal from './ProfileShareModal';
 
-export default function Sidebar({ rooms, activeRoom, onSelectRoom, onCreateRoom, onJoinRoom, user, onLogout }) {
+
+export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, onCreateRoom, onJoinRoom, user, onLogout }) {
     const [tab, setTab] = useState('group'); // 'group' or 'direct'
     const [showShareProfile, setShowShareProfile] = useState(false);
+
 
     const filteredRooms = rooms.filter(r => r.type === tab);
 
@@ -74,6 +76,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, onCreateRoom,
                     <button
                         key={room.id}
                         onClick={() => onSelectRoom(room)}
+                        disabled={loadingRoomId === room.id} 
                         className={`w-full text-left p-3 rounded-lg flex items-center gap-3 transition-all duration-200 group hover:translate-x-1 ${
                             activeRoom?.id === room.id 
                             ? 'bg-violet-600/10 text-violet-300 border border-violet-500/20 shadow-sm' 
@@ -98,10 +101,16 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, onCreateRoom,
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
                                 )}
                             </div>
-                            {room.unread_count > 0 && (
-                                <span className="bg-violet-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] h-[20px] flex items-center justify-center">
-                                    {room.unread_count > 99 ? '99+' : room.unread_count}
-                                </span>
+                            
+                            {/* Loading Indicator or Badge */}
+                            {loadingRoomId === room.id ? (
+                                <div className="w-5 h-5 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin"></div>
+                            ) : (
+                                room.unread_count > 0 && (
+                                    <span className="bg-violet-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] h-[20px] flex items-center justify-center">
+                                        {room.unread_count > 99 ? '99+' : room.unread_count}
+                                    </span>
+                                )
                             )}
                         </div>
                     </button>
@@ -127,6 +136,13 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, onCreateRoom,
             </div>
 
             
+            {showShareProfile && (
+                <ProfileShareModal 
+                    user={user} 
+                    onClose={() => setShowShareProfile(false)} 
+                />
+            )}
+
             {showShareProfile && (
                 <ProfileShareModal 
                     user={user} 

@@ -5,16 +5,20 @@ import ChatWindow from '../components/ChatWindow';
 import CreateRoomModal from '../components/CreateRoomModal';
 import JoinRoomModal from '../components/JoinRoomModal';
 import GroupInfoModal from '../components/GroupInfoModal';
+import LogoutModal from '../components/LogoutModal';
 import io from 'socket.io-client';
 
 export default function Dashboard() {
     const { user, token, logout } = useAuth();
     const [rooms, setRooms] = useState([]);
     const [activeRoom, setActiveRoom] = useState(null);
+    const [loadingRoomId, setLoadingRoomId] = useState(null); // [NEW] Loading state for chat switching
     const [socket, setSocket] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(false);
+
     const [showGroupInfo, setShowGroupInfo] = useState(false);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
     const activeRoomRef = useRef(null);
     
     // Resize Logic
@@ -239,6 +243,62 @@ export default function Dashboard() {
         }
     };
 
+    // [NEW] Helper to hydrate messages (resolve replies)
+    const hydrateMessages = (messages) => {
+        const byId = new Map(messages.map(m => [m.id, m]));
+        return messages.map(m => {
+            if (!m.reply_to_message_id) return m;
+
+            const original = byId.get(m.reply_to_message_id);
+            if (!original) return m;
+
+            const raw = original.content || "";
+            const normalized = raw.replace(/\s+/g, " ").trim();
+            const maxLen = 120;
+            const snippet = normalized.length > maxLen
+                ? normalized.slice(0, maxLen) + "…"
+                : normalized;
+
+            return {
+                ...m,
+                replyTo: {
+                    id: original.id,
+                    sender: original.display_name || original.username,
+                    text: snippet,
+                },
+            };
+        });
+    };
+
+    // [NEW] Handle Room Selection with Pre-fetching
+    const handleSelectRoom = async (room) => {
+        if (activeRoom?.id === room.id) return; // Already valid
+        
+        setLoadingRoomId(room.id);
+        
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/messages`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                const hydrated = hydrateMessages(data);
+                
+                // Pass messages WITH the room object so ChatWindow can init immediately
+                setActiveRoom({ ...room, initialMessages: hydrated });
+            } else {
+                console.error("Failed to fetch messages");
+                setActiveRoom(room); // Fallback to empty/loading inside if needed (or handle error)
+            }
+        } catch (err) {
+            console.error(err);
+            setActiveRoom(room);
+        } finally {
+            setLoadingRoomId(null);
+        }
+    };
+
     return (
         <div className={`flex h-screen bg-gray-900 text-white overflow-hidden ${isResizing ? 'select-none cursor-col-resize' : ''} animate-dashboard-entry`}>
             {/* Mobile: Sidebar hidden if activeRoom exists. Desktop: Always visible */}
@@ -252,11 +312,13 @@ export default function Dashboard() {
                 <Sidebar 
                     rooms={rooms} 
                     activeRoom={activeRoom} 
-                    onSelectRoom={setActiveRoom}
+                    onSelectRoom={handleSelectRoom} // [MODIFIED] Use new handler
+                    loadingRoomId={loadingRoomId}   // [NEW] Pass loading state
                     onCreateRoom={() => setShowCreateModal(true)}
                     onJoinRoom={() => setShowJoinModal(true)}
                     user={user}
-                    onLogout={logout}
+
+                    onLogout={() => setShowLogoutModal(true)}
                 />
             </div>
 
@@ -275,8 +337,9 @@ export default function Dashboard() {
             `}>
                 {activeRoom ? (
                     <ChatWindow 
+                        key={activeRoom.id} // [NEW] Force re-mount for new room
                         socket={socket} 
-                        room={activeRoom} 
+                        room={activeRoom} // contains initialMessages now
                         user={user} 
                         onBack={() => setActiveRoom(null)}
                         showGroupInfo={showGroupInfo}
@@ -305,6 +368,15 @@ export default function Dashboard() {
                     onJoin={handleJoinRoom} 
                 />
             )}
+
+            <LogoutModal 
+                isOpen={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={() => {
+                    setShowLogoutModal(false);
+                    logout();
+                }}
+            />
 
             {showGroupInfo && activeRoom && (
                 <GroupInfoModal 

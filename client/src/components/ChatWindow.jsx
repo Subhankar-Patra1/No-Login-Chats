@@ -5,10 +5,11 @@ import { useAuth } from '../context/AuthContext';
 
 export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo }) {
     const { token } = useAuth();
-    const [messages, setMessages] = useState([]);
+    // [MODIFIED] Initialize with props instead of empty array
+    const [messages, setMessages] = useState(room.initialMessages || []); 
     const [isExpired, setIsExpired] = useState(false);
-    const [replyTo, setReplyTo] = useState(null); // [NEW] Reply state
-    // const [showInfoModal, setShowInfoModal] = useState(false); // Prop driven now
+    const [replyTo, setReplyTo] = useState(null); 
+    // const [showInfoModal, setShowInfoModal] = useState(false); 
 
     const handleLeave = async () => {
         if (!confirm('Are you sure you want to leave this group?')) return;
@@ -24,6 +25,14 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     };
 
+    // [NEW] Update messages when room or initialMessages changes (forcing reset if room changes, though usually key change handles this)
+    useEffect(() => {
+        if (room.initialMessages) {
+             setMessages(room.initialMessages);
+        }
+    }, [room.initialMessages]);
+
+
     useEffect(() => {
         if (!socket || !room) return;
 
@@ -34,39 +43,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             setIsExpired(false);
         }
 
-        // Fetch history
-        fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/messages`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-        .then(res => res.json())
-        .then(data => {
-            // Hydrate reply data
-            const byId = new Map(data.map(m => [m.id, m]));
-            const hydrated = data.map(m => {
-                if (!m.reply_to_message_id) return m;
+        // [REMOVED] Internal fetch logic - now handled by parent
 
-                const original = byId.get(m.reply_to_message_id);
-                if (!original) return m;
-
-                const raw = original.content || "";
-                const normalized = raw.replace(/\s+/g, " ").trim();
-                const maxLen = 120;
-                const snippet = normalized.length > maxLen
-                    ? normalized.slice(0, maxLen) + "…"
-                    : normalized;
-
-                return {
-                    ...m,
-                    replyTo: {
-                        id: original.id,
-                        sender: original.display_name || original.username,
-                        text: snippet,
-                    },
-                };
-            });
-            setMessages(hydrated);
-        })
-        .catch(err => console.error(err));
 
         // Join room
         socket.emit('join_room', room.id);
