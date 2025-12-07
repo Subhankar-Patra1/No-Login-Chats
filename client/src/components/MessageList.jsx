@@ -160,7 +160,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                 
                 <div className="relative group">
                     <div className={`
-                        px-4 py-3 shadow-md text-sm leading-relaxed break-words relative overflow-hidden whitespace-pre-wrap
+                        px-4 py-3 shadow-md text-sm leading-relaxed break-all relative overflow-hidden whitespace-pre-wrap
                         ${isMe 
                             ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm' 
                             : 'bg-slate-800 text-slate-200 rounded-2xl rounded-tl-sm border border-slate-700'

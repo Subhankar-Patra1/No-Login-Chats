@@ -176,20 +176,20 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     <span className="material-symbols-outlined">arrow_back</span>
                 </button>
 
-                <div className="flex-1">
-                    <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 truncate">
                         {room.type === 'group' && (
-                            <span className="material-symbols-outlined text-violet-400">tag</span>
+                            <span className="material-symbols-outlined text-violet-400 shrink-0">tag</span>
                         )}
-                        {room.name}
+                        <span className="truncate">{room.name}</span>
                         {room.type === 'group' && (
-                            <span className="text-xs bg-slate-800 px-2 py-1 rounded-md text-slate-400 font-mono border border-slate-700 ml-2">
+                            <span className="text-xs bg-slate-800 px-2 py-1 rounded-md text-slate-400 font-mono border border-slate-700 ml-2 shrink-0">
                                 {room.code}
                             </span>
                         )}
                     </h2>
                     {room.type === 'direct' && room.username && (
-                        <p className="text-xs text-slate-400 font-medium">
+                        <p className="text-xs text-slate-400 font-medium truncate">
                             {room.username.startsWith('@') ? room.username : `@${room.username}`}
                         </p>
                     )}

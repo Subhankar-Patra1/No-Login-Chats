@@ -176,13 +176,13 @@ export default function MessageInput({ onSend, disabled, replyTo, setReplyTo }) 
                         ${replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} 
                     `}>
                         {showEmoji && (
-                            <div className="absolute bottom-full right-0 mb-4 z-50 shadow-2xl rounded-xl" ref={pickerRef}>
+                            <div className="absolute bottom-full mb-2 z-50 shadow-2xl rounded-xl left-1/2 -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 w-[90vw] sm:w-[350px]" ref={pickerRef}>
                                 <EmojiPicker 
                                     theme="dark" 
                                     onEmojiClick={handleEmojiClick}
                                     emojiStyle={EmojiStyle.APPLE} // Force Apple style in picker too
-                                    width={300}
-                                    height={400}
+                                    width="100%"
+                                    height={350}
                                     searchDisabled={false}
                                     skinTonesDisabled={true}
                                     style={{

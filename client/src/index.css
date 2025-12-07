@@ -5,6 +5,9 @@
 @tailwind utilities;
 
 @layer base {
+  html, body {
+    @apply h-full w-full overflow-hidden overscroll-none;
+  }
   body {
     @apply font-sans bg-slate-950 text-slate-50;
   }
