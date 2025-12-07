@@ -58,7 +58,205 @@ const renderEmoji = (text) => {
     return elements;
 };
 
-export default function MessageList({ messages, currentUser, roomId, socket }) {
+const MessageItem = ({ msg, isMe, onReply }) => { // [MODIFY] accept onReply
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef(null);
+
+    const toggleMenu = (e) => {
+        e.stopPropagation();
+        setShowMenu(prev => !prev);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowMenu(false);
+            }
+        };
+
+        if (showMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showMenu]);
+
+    const scrollToMessage = (id) => {
+        const el = document.getElementById(`msg-${id}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+
+    return (
+        <div 
+            id={`msg-${msg.id}`} // [NEW] Add ID for scrolling
+            className={`flex ${isMe ? 'justify-end' : 'justify-start'} group max-w-full`}
+        >
+            <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                {!isMe && (
+                    <div className="flex items-center gap-2 mb-1 ml-1 select-none">
+                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[10px] text-white font-bold">
+                            {(msg.display_name || msg.username || '?')[0].toUpperCase()}
+                        </div>
+                        <span className="text-xs text-slate-400 font-medium">
+                            {msg.display_name || msg.username}
+                        </span>
+                    </div>
+                )}
+                
+                {/* Message Bubble Wrapper with Options Button */}
+                <div className="relative group">
+                    <div className={`
+                        px-4 py-3 shadow-md text-sm leading-relaxed break-words relative overflow-hidden whitespace-pre-wrap
+                        ${isMe 
+                            ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm' 
+                            : 'bg-slate-800 text-slate-200 rounded-2xl rounded-tl-sm border border-slate-700'
+                        }
+                    `}>
+                        {/* [NEW] Render Reply Information */}
+                        {msg.replyTo && (
+                            <div 
+                                onClick={() => scrollToMessage(msg.replyTo.id)} 
+                                className={`
+                                    mb-2 p-2 rounded-lg cursor-pointer
+                                    border-l-4 border-violet-400
+                                    ${isMe ? 'bg-black/20' : 'bg-black/20'}
+                                `}
+                            >
+                                <div className="text-xs font-bold text-violet-300 mb-0.5">
+                                    {msg.replyTo.sender}
+                                </div>
+                                <div className="text-xs opacity-80 line-clamp-2">
+                                    {msg.replyTo.text}
+                                </div>
+                            </div>
+                        )}
+
+                        <p className="pr-10">
+                            {renderEmoji(msg.content)}
+                        </p>
+                        
+                        {/* Status Icon (Only for own messages) */}
+                        {isMe && (
+                            <div className="absolute bottom-1 right-3 flex items-center gap-1 text-violet-200/80">
+                                {msg.status === 'sending' && (
+                                    <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>
+                                )}
+                                {msg.status === 'sent' && ( // Default DB status
+                                    <span className="material-symbols-outlined text-[14px]">check</span>
+                                )}
+                                {msg.status === 'delivered' && ( // If we implement delivered
+                                    <span className="material-symbols-outlined text-[14px]">check_circle</span> 
+                                )}
+                                {msg.status === 'seen' && (
+                                    <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                {/* Options Button Wrapper & Dropdown Anchor */}
+                <div className={`
+                    absolute top-1/2 -translate-y-1/2
+                    ${isMe ? 'right-full mr-2' : 'left-full ml-2'}
+                    z-10
+                `}>
+                    <button
+                        type="button"
+                        className={`
+                            opacity-0 group-hover:opacity-100
+                            transition-opacity duration-150
+                            text-slate-300 hover:text-white
+                            p-1 rounded-full
+                        `}
+                        onClick={toggleMenu}
+                    >
+                        ⋯
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showMenu && (
+                        <div
+                            ref={menuRef}
+                            className={`
+                                absolute top-full mt-2
+                                left-1/2 -translate-x-1/2
+                                w-48
+                                rounded-2xl
+                                bg-slate-900
+                                border border-slate-700/70
+                                shadow-2xl shadow-black/60
+                                py-1
+                                z-50
+                            `}
+                        >
+                            <button 
+                                className="
+                                    w-full
+                                    flex items-center gap-2
+                                    px-3 py-2.5
+                                    text-left
+                                    text-sm
+                                    text-slate-100
+                                    hover:bg-slate-800
+                                    rounded-t-2xl
+                                "
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    // [NEW] Call setReplyTo
+                                    const raw = msg.content || "";
+                                    const normalized = raw.replace(/\s+/g, " ").trim();
+                                    const maxLen = 120;
+                                    const snippet = normalized.length > maxLen
+                                        ? normalized.slice(0, maxLen) + "…"
+                                        : normalized;
+
+                                    onReply({
+                                        id: msg.id,
+                                        sender: msg.display_name || msg.username,
+                                        text: snippet
+                                    });
+                                    setShowMenu(false);
+                                }}
+                            >
+                                <span className="material-symbols-outlined text-base">reply</span>
+                                <span>Reply</span>
+                            </button>
+                            <button 
+                                className="
+                                    w-full
+                                    flex items-center gap-2
+                                    px-3 py-2.5
+                                    text-left
+                                    text-sm
+                                    text-slate-100
+                                    hover:bg-slate-800
+                                    rounded-b-2xl
+                                "
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    // handleCopyText();
+                                    navigator.clipboard.writeText(msg.content);
+                                    setShowMenu(false);
+                                }}
+                            >
+                                <span className="material-symbols-outlined text-base">content_copy</span>
+                                <span>Copy Text</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+                </div>
+                
+                <div className={`text-[10px] mt-1 px-1 opacity-0 ${msg.status !== 'sending' ? 'group-hover:opacity-100' : ''} transition-opacity select-none ${isMe ? 'text-slate-500' : 'text-slate-500'}`}>
+                    {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default function MessageList({ messages, currentUser, roomId, socket, onReply }) { // [MODIFY] accept onReply
     const [showScrollButton, setShowScrollButton] = useState(false);
     const scrollRef = useRef(null);
     const bottomRef = useRef(null);
@@ -80,14 +278,6 @@ export default function MessageList({ messages, currentUser, roomId, socket }) {
         if (unseenIds.length > 0) {
             // Emit mark_seen event
             socket.emit('mark_seen', { roomId, messageIds: unseenIds });
-            
-            // Note: Optimistic update for 'seen' isn't strictly necessary if backend broadcasts update
-            // But we could do it here if we wanted instant feedback.
-            // For now rely on server broadcast 'messages_status_update' (handled in ChatWindow if implemented there, 
-            // or we need to update messages prop from parent. 
-            // Wait, MessageList receives messages from props. 
-            // ChatWindow needs to handle 'messages_status_update' to update state.
-            // I should add that listener to ChatWindow!)
         }
     }, [messages, socket, roomId, currentUser.id]);
 
@@ -167,57 +357,12 @@ export default function MessageList({ messages, currentUser, roomId, socket }) {
                         );
                     }
 
+
                     return (
-                        <div key={msg.id || index} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group max-w-full`}>
-                            <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                {!isMe && (
-                                    <div className="flex items-center gap-2 mb-1 ml-1 select-none">
-                                        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[10px] text-white font-bold">
-                                            {(msg.display_name || msg.username || '?')[0].toUpperCase()}
-                                        </div>
-                                        <span className="text-xs text-slate-400 font-medium">
-                                            {msg.display_name || msg.username}
-                                        </span>
-                                    </div>
-                                )}
-                                
-                                <div className={`
-                                    px-4 py-3 shadow-md text-sm leading-relaxed break-words relative overflow-hidden whitespace-pre-wrap
-                                    ${isMe 
-                                        ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm' 
-                                        : 'bg-slate-800 text-slate-200 rounded-2xl rounded-tl-sm border border-slate-700'
-                                    }
-                                `}>
-                                    <p className="pr-10">
-                                        {renderEmoji(msg.content)}
-                                    </p>
-                                    
-                                    {/* Status Icon (Only for own messages) */}
-                                    {isMe && (
-                                        <div className="absolute bottom-1 right-3 flex items-center gap-1 text-violet-200/80">
-                                            {msg.status === 'sending' && (
-                                                <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>
-                                            )}
-                                            {msg.status === 'sent' && ( // Default DB status
-                                                <span className="material-symbols-outlined text-[14px]">check</span>
-                                            )}
-                                            {msg.status === 'delivered' && ( // If we implement delivered
-                                                <span className="material-symbols-outlined text-[14px]">check_circle</span> 
-                                            )}
-                                            {msg.status === 'seen' && (
-                                                <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className={`text-[10px] mt-1 px-1 opacity-0 ${msg.status !== 'sending' ? 'group-hover:opacity-100' : ''} transition-opacity select-none ${isMe ? 'text-slate-500' : 'text-slate-500'}`}>
-                                    {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                                </div>
-                            </div>
-                        </div>
+                        <MessageItem key={msg.id || index} msg={msg} isMe={isMe} onReply={onReply} />
                     );
                 })}
+
                 <div ref={bottomRef} />
             </div>
 

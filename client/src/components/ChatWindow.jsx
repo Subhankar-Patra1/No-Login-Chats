@@ -7,6 +7,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const { token } = useAuth();
     const [messages, setMessages] = useState([]);
     const [isExpired, setIsExpired] = useState(false);
+    const [replyTo, setReplyTo] = useState(null); // [NEW] Reply state
     // const [showInfoModal, setShowInfoModal] = useState(false); // Prop driven now
 
     const handleLeave = async () => {
@@ -62,7 +63,13 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     if (reversedIndex !== -1) {
                         const index = prev.length - 1 - reversedIndex;
                         const newMsgs = [...prev];
-                        newMsgs[index] = msg; // Replace with real message
+                        // Preserve replyTo from the optimistic message if the server message doesn't have it
+                        // This fixes the issue where reply preview disappears on status change
+                        const preservedMsg = { 
+                            ...msg, 
+                            replyTo: msg.replyTo || prev[index].replyTo 
+                        };
+                        newMsgs[index] = preservedMsg; // Replace with real message
                         return newMsgs;
                     }
                     return [...prev, msg];
@@ -89,7 +96,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         };
     }, [socket, room, token]);
 
-    const handleSend = (content) => {
+    const handleSend = (content, replyToMsg) => { // [MODIFY] accept replyToMsg
         if (socket && !isExpired) {
             // Optimistic Update
             const tempMsg = {
@@ -97,6 +104,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 room_id: room.id,
                 user_id: user.id,
                 content,
+                replyTo: replyToMsg || null, // [NEW] include replyTo
                 created_at: new Date().toISOString(),
                 username: user.username,
                 display_name: user ? user.display_name : 'Me',
@@ -104,7 +112,12 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             };
             setMessages(prev => [...prev, tempMsg]);
             
-            socket.emit('send_message', { roomId: room.id, content });
+            socket.emit('send_message', { 
+                roomId: room.id, 
+                content,
+                replyTo: replyToMsg || null // [NEW] send to server
+            });
+            setReplyTo(null); // [NEW] Clear reply after sending
         }
     };
 
@@ -161,9 +174,20 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 )}
             </div>
 
-            <MessageList messages={messages} currentUser={user} roomId={room.id} socket={socket} />
+            <MessageList 
+                messages={messages} 
+                currentUser={user} 
+                roomId={room.id} 
+                socket={socket} 
+                onReply={setReplyTo} // [NEW] Pass setter
+            />
             
-            <MessageInput onSend={handleSend} disabled={isExpired} />
+            <MessageInput 
+                onSend={(content) => handleSend(content, replyTo)} // [NEW] inject replyTo
+                disabled={isExpired} 
+                replyTo={replyTo}          // [NEW] Pass state
+                setReplyTo={setReplyTo}    // [NEW] Pass setter
+            />
 
 
         </div>
