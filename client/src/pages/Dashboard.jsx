@@ -333,7 +333,7 @@ export default function Dashboard() {
             {/* Mobile: Chat visible if activeRoom exists. Desktop: Always visible (flex-1) */}
             <div className={`
                 ${activeRoom ? 'flex' : 'hidden md:flex'} 
-                flex-1 flex-col h-full bg-gray-900 relative z-0 min-w-0
+                flex-1 flex-col h-full bg-gray-900 relative z-0 min-w-0 overflow-hidden
             `}>
                 {activeRoom ? (
                     <ChatWindow 
