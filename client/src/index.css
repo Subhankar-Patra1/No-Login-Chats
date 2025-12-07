@@ -131,3 +131,23 @@
 .material-symbols-outlined.filled {
   font-variation-settings: 'FILL' 1;
 }
+
+/* Reply Highlight Animation */
+.reply-highlight {
+  animation: replyPulse 1.6s ease-out;
+}
+
+@keyframes replyPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.8);
+    background-color: rgba(139, 92, 246, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0.0);
+    background-color: rgba(139, 92, 246, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.0);
+    background-color: transparent;
+  }
+}

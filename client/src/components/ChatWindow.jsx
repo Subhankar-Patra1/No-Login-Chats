@@ -129,14 +129,26 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             }
         };
 
+        const handleMessageDeleted = ({ messageId }) => {
+            setMessages(prev => prev.map(msg => 
+                msg.id === messageId ? { ...msg, is_deleted_for_everyone: true } : msg
+            ));
+        };
+
         socket.on('new_message', handleNewMessage);
         socket.on('messages_status_update', handleStatusUpdate);
+        socket.on('message_deleted', handleMessageDeleted);
 
         return () => {
             socket.off('new_message', handleNewMessage);
             socket.off('messages_status_update', handleStatusUpdate);
+            socket.off('message_deleted', handleMessageDeleted);
         };
     }, [socket, room, token]);
+
+    const handleLocalDelete = (messageId) => {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+    };
 
     const handleSend = (content, replyToMsg) => { // [MODIFY] accept replyToMsg
         if (socket && !isExpired) {
@@ -218,10 +230,12 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
             <MessageList 
                 messages={messages} 
+                setMessages={setMessages} // [NEW] Pass setter for optimistic updates
                 currentUser={user} 
                 roomId={room.id} 
                 socket={socket} 
-                onReply={setReplyTo} // [NEW] Pass setter
+                onReply={setReplyTo} 
+                onDelete={handleLocalDelete}
             />
             
             <MessageInput 

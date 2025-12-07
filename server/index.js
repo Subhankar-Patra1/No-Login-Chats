@@ -33,6 +33,9 @@ app.use('/api/auth', authRoutes);
 const roomRoutes = require('./rooms');
 app.use('/api/rooms', roomRoutes);
 
+const messageRoutes = require('./messages');
+app.use('/api/messages', messageRoutes);
+
 // Basic route
 app.get('/', (req, res) => {
     res.send('Chat Server Running');
