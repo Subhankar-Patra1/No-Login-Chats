@@ -6,6 +6,16 @@ const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const bucketName = process.env.AWS_BUCKET_NAME;
 
+const missingVars = [];
+if (!region) missingVars.push('AWS_REGION');
+if (!accessKeyId) missingVars.push('AWS_ACCESS_KEY_ID');
+if (!secretAccessKey) missingVars.push('AWS_SECRET_ACCESS_KEY');
+if (!bucketName) missingVars.push('AWS_BUCKET_NAME');
+
+if (missingVars.length > 0) {
+    console.error(`[S3 Error] Missing AWS environment variables: ${missingVars.join(', ')}. Audio uploads will fail.`);
+}
+
 const s3Client = new S3Client({
     region,
     credentials: {
