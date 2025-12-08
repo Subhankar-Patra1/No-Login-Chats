@@ -1,63 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import emojiRegex from 'emoji-regex';
+import { linkifyText } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 
-// Helper to convert emoji to hex code, stripping VS16 (fe0f) for CDN compatibility
-const toHex = (emoji) => {
-    return Array.from(emoji)
-        .map(c => c.codePointAt(0).toString(16))
-        .filter(hex => hex !== 'fe0f') // Strip variation selector 16
-        .join('-');
-};
 
-// Custom renderer to replace emoji chars with Apple images
-const renderEmoji = (text) => {
-    if (!text) return null;
-    const regex = emojiRegex();
-    
-    const elements = [];
-    let lastIndex = 0;
-    let match;
-    let key = 0;
 
-    while ((match = regex.exec(text)) !== null) {
-        const emojiChar = match[0];
-        const index = match.index;
-        
-        if (index > lastIndex) {
-            elements.push(<span key={key++}>{text.substring(lastIndex, index)}</span>);
-        }
-        
-        const hex = toHex(emojiChar);
-        elements.push(
-            <img 
-                key={key++}
-                src={`https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png`}
-                alt={emojiChar}
-                className="w-5 h-5 inline-block align-bottom mx-[1px]"
-                draggable="false"
-                loading="lazy"
-                onError={(e) => {
-                    // Fallback to native text if image fails
-                    e.currentTarget.style.display = 'none';
-                    const span = document.createElement('span');
-                    span.textContent = emojiChar;
-                    if (e.currentTarget.parentNode) {
-                        e.currentTarget.parentNode.insertBefore(span, e.currentTarget);
-                    }
-                }}
-            />
-        );
-        
-        lastIndex = regex.lastIndex;
-    }
-    
-    if (lastIndex < text.length) {
-        elements.push(<span key={key++}>{text.substring(lastIndex)}</span>);
-    }
-    
-    return elements;
-};
 
 const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
     const [showMenu, setShowMenu] = useState(false);
@@ -186,7 +132,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                         )}
 
                         <p className="pr-10">
-                            {renderEmoji(msg.content)}
+                            {linkifyText(msg.content)}
                         </p>
                         
                         {isMe && (
