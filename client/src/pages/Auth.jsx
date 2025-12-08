@@ -144,32 +144,141 @@ export default function Auth() {
     return (
         <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-slate-950 overflow-hidden">
             {/* Left Side - Visual */}
-            <div className="relative hidden lg:flex flex-col items-center justify-center p-12 overflow-hidden bg-slate-900 h-full">
-                {/* Abstract Background */}
+            <div className="relative hidden lg:flex flex-col items-center justify-center p-8 overflow-hidden bg-slate-900 h-full">
+                {/* Background Gradients */}
                 <div className="absolute inset-0 w-full h-full">
-                    <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-violet-600/20 rounded-full blur-[120px] animate-pulse" />
-                    <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse delay-1000" />
-                    <div className="absolute top-[40%] left-[40%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[100px]" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950" />
+                    <div className="absolute -top-40 -left-40 w-96 h-96 bg-violet-600/20 rounded-full blur-[100px] animate-pulse" />
+                    <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px]" />
                 </div>
 
-                {/* Content */}
-                <div className="relative z-10 text-center max-w-lg">
-                    <div className="w-24 h-24 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-3xl mx-auto flex items-center justify-center mb-8 shadow-2xl shadow-violet-500/30 transform -rotate-6">
-                        <span className="material-symbols-outlined text-5xl text-white">chat_bubble</span>
+                {/* Mock Chat Interface Container */}
+                <div className="relative z-10 w-full max-w-[420px] perspective-1000">
+                    <div className="transform rotate-y-[-5deg] rotate-x-[5deg] hover:rotate-0 transition-transform duration-700 ease-out">
+                        <div className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden ring-1 ring-white/5">
+                            {/* Mock Header */}
+                            <div className="bg-white/5 p-4 flex items-center gap-3 border-b border-white/5">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                                    TG
+                                </div>
+                                <div>
+                                    <div className="h-2.5 w-24 bg-slate-700 rounded-full mb-1.5" />
+                                    <div className="h-2 w-16 bg-slate-800 rounded-full" />
+                                </div>
+                                <div className="ml-auto flex gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                                    <div className="w-2 h-2 rounded-full bg-slate-700" />
+                                </div>
+                            </div>
+
+                            {/* Mock Messages */}
+                            <div className="p-5 space-y-4 min-h-[320px] bg-gradient-to-b from-transparent to-black/20">
+                                {/* Incoming - Feature: No Email */}
+                                <div className="flex gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: '500ms', animationFillMode: 'forwards' }}>
+                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0" />
+                                    <div className="bg-slate-800/80 p-3 rounded-2xl rounded-tl-none text-xs text-slate-300 shadow-sm border border-white/5 max-w-[85%]">
+                                        <p>Wait, I don't need an email to sign up?</p>
+                                    </div>
+                                </div>
+
+                                {/* Outgoing - Confirmation */}
+                                <div className="flex gap-3 flex-row-reverse opacity-0 animate-fade-in-up" style={{ animationDelay: '2500ms', animationFillMode: 'forwards' }}>
+                                    <div className="bg-violet-600 p-3 rounded-2xl rounded-tr-none text-xs text-white shadow-md shadow-violet-500/10 max-w-[85%]">
+                                        <p>Nope! Just pick a username and start chatting instantly.</p>
+                                    </div>
+                                </div>
+
+                                {/* Incoming - Feature: Privacy */}
+                                <div className="flex gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: '4500ms', animationFillMode: 'forwards' }}>
+                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex-shrink-0" />
+                                    <div className="bg-slate-800/80 p-3 rounded-2xl rounded-tl-none text-xs text-slate-300 shadow-sm border border-white/5 max-w-[85%]">
+                                        <p>That's awesome. And what about my data?</p>
+                                    </div>
+                                </div>
+
+                                {/* Outgoing - Feature: Zero Logs */}
+                                <div className="flex gap-3 flex-row-reverse opacity-0 animate-fade-in-up" style={{ animationDelay: '6500ms', animationFillMode: 'forwards' }}>
+                                    <div className="bg-violet-600 p-3 rounded-2xl rounded-tr-none text-xs text-white shadow-md shadow-violet-500/10 max-w-[85%]">
+                                        <p>Zero logs. Rooms expire automatically. Complete privacy.</p>
+                                    </div>
+                                </div>
+                                
+                                {/* Typing Indicator */}
+                                <div className="flex gap-2 ml-11 opacity-0 animate-fade-in-up" style={{ animationDelay: '8000ms', animationFillMode: 'forwards' }}>
+                                    <div className="w-1.5 h-1.5 bg-slate-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <div className="w-1.5 h-1.5 bg-slate-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <div className="w-1.5 h-1.5 bg-slate-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+
+                            {/* Mock Input */}
+                            <div className="p-4 bg-white/5 border-t border-white/5 flex gap-3">
+                                <div className="flex-1 h-10 bg-black/20 rounded-xl border border-white/5" />
+                                <div className="w-10 h-10 bg-violet-600/20 rounded-xl border border-violet-500/20 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-violet-400 text-sm">send</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Floating Decor */}
+                        <div className="absolute -right-8 top-20 bg-slate-800/80 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-xl animate-[float_4s_ease-in-out_infinite_delay-1000] group cursor-pointer">
+                            <div className="relative">
+                                <span className="text-2xl relative z-10 transition-transform duration-300 group-hover:scale-110 block">🔒</span>
+                                {/* Security Pulse Rings */}
+                                <div className="absolute inset-0 rounded-full border border-violet-400/30 animate-[lock-pulse_2s_ease-out_infinite] z-0" />
+                                <div className="absolute inset-0 rounded-full border border-violet-400/30 animate-[lock-pulse_2s_ease-out_infinite_delay-1000] z-0" />
+                            </div>
+                        </div>
+                        <div className="absolute -left-6 bottom-32 bg-slate-800/80 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-xl animate-[float_5s_ease-in-out_infinite_delay-500]">
+                            {/* Custom SVG Rocket for perfect alignment */}
+                            <svg width="42" height="42" viewBox="-10 -10 60 75" fill="none" xmlns="http://www.w3.org/2000/svg" className="transform rotate-45">
+                                {/* Flame Group - Animated */}
+                                <g className="animate-[rocket-burn-svg_0.15s_ease-in-out_infinite] origin-[20px_35px]">
+                                    {/* Main Thrust */}
+                                    <path d="M20 35 C 16 45, 10 55, 20 65 C 30 55, 24 45, 20 35" fill="url(#flameGradient)" filter="url(#glow)" />
+                                    {/* Inner Core */}
+                                    <path d="M20 35 C 18 42, 16 48, 20 50 C 24 48, 22 42, 20 35" fill="#FFF" fillOpacity="0.8" />
+                                </g>
+                                
+                                {/* Rocket Body */}
+                                <path d="M20 0 C 20 0, 35 15, 35 30 C 35 40, 20 40, 20 40 C 20 40, 5 40, 5 30 C 5 15, 20 0, 20 0 Z" fill="#E2E8F0" />
+                                <path d="M20 0 C 20 0, 28 15, 28 30 C 28 40, 20 40, 20 40" fill="#CBD5E1" /> {/* Shading */}
+                                
+                                {/* Window */}
+                                <circle cx="20" cy="20" r="5" fill="#38BDF8" stroke="#94A3B8" strokeWidth="2" />
+                                
+                                {/* Fins */}
+                                <path d="M5 30 L -2 42 L 10 38" fill="#F43F5E" />
+                                <path d="M35 30 L 42 42 L 30 38" fill="#F43F5E" />
+                                <path d="M20 35 L 20 42" stroke="#F43F5E" strokeWidth="4" strokeLinecap="round" />
+
+                                {/* Defs */}
+                                <defs>
+                                    <linearGradient id="flameGradient" x1="20" y1="35" x2="20" y2="65" gradientUnits="userSpaceOnUse">
+                                        <stop stopColor="#F59E0B" />
+                                        <stop offset="0.5" stopColor="#EF4444" />
+                                        <stop offset="1" stopColor="#EF4444" stopOpacity="0" />
+                                    </linearGradient>
+                                    <filter id="glow" x="0" y="0" width="200%" height="200%">
+                                        <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                                        <feMerge>
+                                            <feMergeNode in="coloredBlur" />
+                                            <feMergeNode in="SourceGraphic" />
+                                        </feMerge>
+                                    </filter>
+                                </defs>
+                            </svg>
+                        </div>
                     </div>
-                    <h1 className="text-5xl font-bold text-white mb-6 tracking-tight">
-                        Chat without <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-indigo-400">Limits</span>.
-                    </h1>
-                    <p className="text-slate-400 text-lg leading-relaxed">
-                        Create expiring rooms, share secure codes, and connect instantly. No email required, just pick a username and start chatting.
-                    </p>
                 </div>
 
-                {/* Decorative Elements */}
-                <div className="absolute bottom-12 left-12 flex gap-4 opacity-50">
-                    <div className="w-3 h-3 rounded-full bg-slate-700" />
-                    <div className="w-3 h-3 rounded-full bg-slate-700" />
-                    <div className="w-3 h-3 rounded-full bg-violet-500" />
+                <div className="mt-12 text-center relative z-10">
+                    <h1 className="text-4xl font-bold text-white mb-4 tracking-tight">
+                        Conversations, <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-indigo-400">Unbound</span>.
+                    </h1>
+                    <p className="text-slate-400 max-w-sm mx-auto">
+                        No login required. No history saved. Just instant, secure, and anonymous messaging that disappears when you leave.
+                    </p>
                 </div>
             </div>
 
