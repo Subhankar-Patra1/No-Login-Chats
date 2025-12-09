@@ -171,6 +171,103 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     };
 
+    const uploadAudioWithProgress = async (formData, tempId) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${import.meta.env.VITE_API_URL}/api/messages/audio`);
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percent = event.loaded / event.total;
+                    setMessages(prev => prev.map(m => 
+                        m.id === tempId ? { ...m, uploadProgress: percent } : m
+                    ));
+                }
+            };
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(JSON.parse(xhr.responseText));
+                } else {
+                    reject(new Error('Upload failed'));
+                }
+            };
+
+            xhr.onerror = () => reject(new Error('Network error'));
+            
+            xhr.send(formData);
+        });
+    };
+
+    const handleSendAudio = async (blob, durationMs, waveform, replyToMsg) => { // [MODIFIED] Helper function
+        const tempId = `temp-${Date.now()}`;
+        const tempMsg = {
+            id: tempId,
+            room_id: room.id,
+            user_id: user.id,
+            type: 'audio',
+            content: null,
+            audio_url: URL.createObjectURL(blob),
+            audio_duration_ms: durationMs,
+            audio_waveform: waveform,
+            replyTo: replyToMsg || null,
+            created_at: new Date().toISOString(),
+            username: user.username,
+            display_name: user ? user.display_name : 'Me',
+            status: 'sending',
+            uploadStatus: 'uploading',
+            uploadProgress: 0,
+            localBlob: blob // Save for retry
+        };
+        setMessages(prev => [...prev, tempMsg]);
+        setReplyTo(null);
+
+        const formData = new FormData();
+        formData.append('audio', blob);
+        formData.append('roomId', room.id);
+        formData.append('durationMs', durationMs);
+        formData.append('waveform', JSON.stringify(waveform));
+        if (replyToMsg) formData.append('replyToMessageId', replyToMsg.id);
+        formData.append('tempId', tempId);
+
+        try {
+            await uploadAudioWithProgress(formData, tempId);
+            // Socket event will handle success replacement
+        } catch (err) {
+            console.error(err);
+            setMessages(prev => prev.map(m => 
+                m.id === tempId ? { ...m, uploadStatus: 'failed', status: 'error' } : m
+            ));
+        }
+    };
+
+    const handleRetryAudio = async (msg) => {
+        if (!msg.localBlob) return; // Should have it
+        
+        // Reset to uploading state
+        setMessages(prev => prev.map(m => 
+            m.id === msg.id ? { ...m, uploadStatus: 'uploading', uploadProgress: 0, status: 'sending' } : m
+        ));
+
+        const formData = new FormData();
+        formData.append('audio', msg.localBlob);
+        formData.append('roomId', room.id);
+        formData.append('durationMs', msg.audio_duration_ms);
+        formData.append('waveform', JSON.stringify(msg.audio_waveform));
+        if (msg.replyTo) formData.append('replyToMessageId', msg.replyTo.id);
+        formData.append('tempId', msg.id); // Reuse tempId
+
+        try {
+            await uploadAudioWithProgress(formData, msg.id);
+        } catch (err) {
+            console.error(err);
+            setMessages(prev => prev.map(m => 
+                m.id === msg.id ? { ...m, uploadStatus: 'failed', status: 'error' } : m
+            ));
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-950 relative overflow-hidden">
             {/* Background Pattern */}
@@ -217,7 +314,6 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     <button 
                         onClick={() => setShowGroupInfo(true)}
                         className="p-2 text-slate-400 hover:text-white transition-all"
-                        title="Group Info"
                     >
                         <span className="material-symbols-outlined">info</span>
                     </button>
@@ -226,58 +322,18 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
             <MessageList 
                 messages={messages} 
-                setMessages={setMessages} // [NEW] Pass setter for optimistic updates
+                setMessages={setMessages} 
                 currentUser={user} 
                 roomId={room.id} 
                 socket={socket} 
                 onReply={setReplyTo} 
                 onDelete={handleLocalDelete}
+                onRetry={handleRetryAudio} // [NEW] Pass retry handler
             />
             
             <MessageInput 
                 onSend={(content) => handleSend(content, replyTo)} 
-                onSendAudio={async (blob, durationMs, waveform) => {
-                    // Optimistic Update
-                    const tempId = `temp-${Date.now()}`;
-                    const tempMsg = {
-                        id: tempId,
-                        room_id: room.id,
-                        user_id: user.id,
-                        type: 'audio',
-                        content: null,
-                        audio_url: URL.createObjectURL(blob),
-                        audio_duration_ms: durationMs,
-                        audio_waveform: waveform,
-                        replyTo: replyTo || null,
-                        created_at: new Date().toISOString(),
-                        username: user.username,
-                        display_name: user ? user.display_name : 'Me',
-                        status: 'sending'
-                    };
-                    setMessages(prev => [...prev, tempMsg]);
-                    setReplyTo(null);
-
-                    const formData = new FormData();
-                    formData.append('audio', blob);
-                    formData.append('roomId', room.id);
-                    formData.append('durationMs', durationMs);
-                    formData.append('waveform', JSON.stringify(waveform));
-                    if (replyTo) formData.append('replyToMessageId', replyTo.id);
-                    formData.append('tempId', tempId);
-
-                    try {
-                        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/messages/audio`, {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${token}` }, // Content-Type is auto-set for FormData
-                            body: formData
-                        });
-                        if (!res.ok) throw new Error('Failed to send audio');
-                        // Socket new_message event handles the rest (replacing tempId)
-                    } catch (err) {
-                        console.error(err);
-                        // Optionally set status to 'failed' locally
-                    }
-                }}
+                onSendAudio={(blob, duration, waveform) => handleSendAudio(blob, duration, waveform, replyTo)} // [MODIFIED] Use handler
                 disabled={isExpired} 
                 replyTo={replyTo}          
                 setReplyTo={setReplyTo}    

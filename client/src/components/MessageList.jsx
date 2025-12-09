@@ -11,7 +11,7 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
+const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard }) => {
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef(null);
     const { token, user } = useAuth(); 
@@ -158,12 +158,39 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                         )}
 
                         {isAudio ? (
-                            <div className="pr-6 pt-1 pb-1">
-                                <AudioPlayer 
-                                    src={msg.audio_url} 
-                                    durationMs={msg.audio_duration_ms} 
-                                    waveform={msg.audio_waveform} 
-                                />
+                            <div className="pr-6 pt-1 pb-1 min-w-[200px]">
+                                {msg.uploadStatus === 'uploading' ? (
+                                    <div className="flex items-center gap-3 py-1">
+                                         <div className="w-8 h-8 rounded-full bg-slate-100/10 flex items-center justify-center">
+                                            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+                                         </div>
+                                         <div className="flex flex-col">
+                                             <span className="text-xs font-medium opacity-90">Uploading...</span>
+                                             <span className="text-[10px] opacity-60">
+                                                 {Math.round((msg.uploadProgress || 0) * 100)}%
+                                             </span>
+                                         </div>
+                                    </div>
+                                ) : msg.uploadStatus === 'failed' ? (
+                                    <div className="flex items-center gap-3 py-1 text-red-100">
+                                         <button 
+                                            onClick={() => onRetry(msg)}
+                                            className="w-8 h-8 rounded-full bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center transition-colors"
+                                         >
+                                            <span className="material-symbols-outlined text-[20px]">refresh</span>
+                                         </button>
+                                         <span className="text-xs font-medium">Upload failed</span>
+                                    </div>
+                                ) : (
+                                    <AudioPlayer 
+                                        src={msg.audio_url} 
+                                        durationMs={msg.audio_duration_ms} 
+                                        waveform={msg.audio_waveform} 
+                                        isMe={isMe}
+                                        isHeard={msg.audio_heard}
+                                        onMarkHeard={() => onMarkHeard(msg.id)}
+                                    />
+                                )}
                             </div>
                         ) : (
                             <p className="pr-10">
@@ -174,6 +201,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                         {isMe && (
                             <div className="absolute bottom-1 right-3 flex items-center gap-1 text-violet-200/80">
                                 {msg.status === 'sending' && <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>}
+                                {msg.status === 'error' && <span className="material-symbols-outlined text-[14px] text-red-300">error</span>}
                                 {msg.status === 'sent' && <span className="material-symbols-outlined text-[14px]">check</span>}
                                 {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px]">check_circle</span>}
                                 {msg.status === 'seen' && <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>}
@@ -236,7 +264,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                                 <span>Reply</span>
                             </button>
                             
-                            {isAudio ? (
+                            {isAudio && msg.status !== 'error' ? (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
                                     onClick={handleDownload}
@@ -244,7 +272,9 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
                                     <span className="material-symbols-outlined text-base">download</span>
                                     <span>Download</span>
                                 </button>
-                            ) : (
+                            ) : null}
+
+                            {!isAudio && (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
                                     onClick={(e) => {
@@ -295,9 +325,26 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone }) => {
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete }) {
+export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry }) {
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
+
+    const handleMarkHeard = async (messageId) => {
+        // Optimistic update
+        setMessages(prev => prev.map(m => 
+            m.id === messageId ? { ...m, audio_heard: true } : m
+        ));
+
+        // API call
+        try {
+            await fetch(`${import.meta.env.VITE_API_URL}/api/messages/${messageId}/audio-heard`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     async function confirmDeleteForEveryone() {
         if (!confirmDeleteMessage) return;
@@ -425,6 +472,8 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onReply={onReply} 
                             onDelete={onDelete}
                             onDeleteForEveryone={(msg) => setConfirmDeleteMessage(msg)}
+                            onRetry={onRetry}
+                            onMarkHeard={handleMarkHeard}
                         />
                     );
                 })}

@@ -8,10 +8,12 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export default function AudioPlayer({ src, durationMs, waveform }) {
+export default function AudioPlayer({ src, durationMs, waveform, isMe, isHeard, onMarkHeard }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [playbackRate, setPlaybackRate] = useState(1);
     const audioRef = useRef(null);
+    const waveformRef = useRef(null);
     const [currentTime, setCurrentTime] = useState(0);
 
     // Ensure waveform is an array. If string (legacy or error), try to parse or default.
@@ -31,19 +33,49 @@ export default function AudioPlayer({ src, durationMs, waveform }) {
         setIsPlaying(!isPlaying);
     };
 
+    const togglePlaybackRate = () => {
+        const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+        setPlaybackRate(nextRate);
+        if (audioRef.current) {
+            audioRef.current.playbackRate = nextRate;
+        }
+    };
+
+    const handleWaveformClick = (e) => {
+        if (!audioRef.current || !audioRef.current.duration) return;
+        
+        const rect = waveformRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const ratio = Math.max(0, Math.min(1, x / rect.width));
+        
+        audioRef.current.currentTime = ratio * audioRef.current.duration;
+        setProgress(ratio);
+        setCurrentTime(audioRef.current.currentTime * 1000);
+    };
+
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
 
         const onTimeUpdate = () => {
             setCurrentTime(audio.currentTime * 1000);
-            setProgress(audio.currentTime / audio.duration);
+            const ratio = audio.currentTime / audio.duration;
+            setProgress(ratio);
+
+            // Mark as heard if played > 80%
+            if (!isMe && !isHeard && ratio > 0.8 && onMarkHeard) {
+                onMarkHeard();
+            }
         };
 
         const onEnded = () => {
             setIsPlaying(false);
             setProgress(0);
             setCurrentTime(0);
+            // Also mark as heard on end just in case
+            if (!isMe && !isHeard && onMarkHeard) {
+                onMarkHeard();
+            }
         };
 
         audio.addEventListener('timeupdate', onTimeUpdate);
@@ -53,15 +85,26 @@ export default function AudioPlayer({ src, durationMs, waveform }) {
             audio.removeEventListener('timeupdate', onTimeUpdate);
             audio.removeEventListener('ended', onEnded);
         };
-    }, []);
+    }, [isMe, isHeard, onMarkHeard]);
+
+    useEffect(() => {
+        if (audioRef.current && isPlaying) {
+            audioRef.current.playbackRate = playbackRate;
+        }
+    }, [playbackRate, isPlaying]);
 
     // If waveform is missing, render a dummy line
     const renderWaveform = () => {
         if (!bars.length) {
             return (
-                <div className="flex-1 h-1 bg-white/20 rounded-full overflow-hidden">
+                <div 
+                    ref={waveformRef}
+                    onClick={handleWaveformClick}
+                    className="flex-1 h-3 bg-white/20 rounded-full overflow-hidden cursor-pointer flex items-center relative group"
+                >
+                    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div 
-                        className="h-full bg-white/80 transition-all duration-100 ease-linear"
+                        className="h-1 bg-white/80 transition-all duration-100 ease-linear rounded-full absolute left-0"
                         style={{ width: `${progress * 100}%` }}
                     />
                 </div>
@@ -69,7 +112,13 @@ export default function AudioPlayer({ src, durationMs, waveform }) {
         }
 
         return (
-            <div className="flex-1 flex items-center h-8 gap-[1px] opacity-80">
+            <div 
+                ref={waveformRef} 
+                onClick={handleWaveformClick}
+                className="flex-1 flex items-center h-8 gap-[1px] opacity-80 cursor-pointer relative group select-none"
+            >
+                <div className="absolute inset-0 top-1 bottom-1 -left-1 -right-1 bg-white/5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity" />
+                
                 {bars.map((v, i) => {
                     // Determine if this bar is "past" the playback head
                     const barPos = i / bars.length;
@@ -91,25 +140,43 @@ export default function AudioPlayer({ src, durationMs, waveform }) {
     };
 
     return (
-        <div className="flex items-center gap-3 min-w-[200px]">
+        <div className="flex items-center gap-2 min-w-[200px] select-none">
             <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
             
-            <button
-                onClick={togglePlay}
-                className="w-8 h-8 rounded-full bg-slate-100/10 flex items-center justify-center hover:bg-slate-100/20 transition text-white shrink-0"
-            >
-                <span className="material-symbols-outlined text-[20px]">
-                    {isPlaying ? 'pause' : 'play_arrow'}
-                </span>
-            </button>
+            <div className="relative">
+                <button
+                    onClick={togglePlay}
+                    className="w-10 h-10 rounded-full bg-slate-100/10 flex items-center justify-center hover:bg-slate-100/20 transition text-white shrink-0"
+                >
+                    <span className="material-symbols-outlined text-[24px]">
+                        {isPlaying ? 'pause' : 'play_arrow'}
+                    </span>
+                </button>
+                {/* Unread Indicator */}
+                {!isMe && !isHeard && (
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
+                    </span>
+                )}
+            </div>
 
-            <div className="flex-1 flex flex-col justify-center">
+            <div className="flex-1 flex flex-col justify-center min-w-[80px]">
                {renderWaveform()}
             </div>
 
-            <span className="text-xs font-medium text-white/70 tabular-nums w-10 text-right">
-                {isPlaying ? formatDuration(currentTime) : formatDuration(durationMs)}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+                 <button
+                    type="button"
+                    onClick={togglePlaybackRate}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 hover:bg-white/20 text-white transition-colors border border-white/5"
+                >
+                    {playbackRate}x
+                </button>
+                <span className="text-[10px] font-medium text-white/70 tabular-nums">
+                    {isPlaying ? formatDuration(currentTime) : formatDuration(durationMs)}
+                </span>
+            </div>
         </div>
     );
 }

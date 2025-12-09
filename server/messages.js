@@ -158,4 +158,23 @@ router.delete('/:id/for-everyone', async (req, res) => {
     }
 });
 
+// Mark audio as heard
+router.post('/:id/audio-heard', async (req, res) => {
+    const messageId = req.params.id;
+    const userId = req.user.id;
+
+    try {
+        await db.query(`
+            INSERT INTO audio_play_state (user_id, message_id, heard_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id, message_id) DO UPDATE SET heard_at = NOW()
+        `, [userId, messageId]);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error marking audio as heard:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 module.exports = router;

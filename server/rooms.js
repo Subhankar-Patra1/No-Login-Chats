@@ -235,13 +235,15 @@ router.get('/:id/messages', async (req, res) => {
             SELECT m.id, m.room_id, m.user_id, m.content, m.type, m.status, m.reply_to_message_id, 
                    m.is_deleted_for_everyone, m.deleted_for_user_ids,
                    m.audio_url, m.audio_duration_ms, m.audio_waveform,
+                   (aps.heard_at IS NOT NULL) as audio_heard,
                    to_char(m.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at,
                    u.display_name, u.username 
             FROM messages m 
             JOIN users u ON m.user_id = u.id 
+            LEFT JOIN audio_play_state aps ON m.id = aps.message_id AND aps.user_id = $2
             WHERE m.room_id = $1 
             ORDER BY m.created_at ASC
-        `, [roomId]);
+        `, [roomId, req.user.id]);
         const messages = messagesRes.rows.map(msg => {
             let parsedWaveform = [];
             if (msg.audio_waveform) {

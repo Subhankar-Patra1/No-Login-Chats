@@ -69,6 +69,13 @@ const createTables = async () => {
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url TEXT;
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_duration_ms INTEGER;
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_waveform TEXT; -- JSON stringified array
+
+            CREATE TABLE IF NOT EXISTS audio_play_state (
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+                heard_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, message_id)
+            );
         `);
         console.log("Tables created successfully");
     } catch (err) {
