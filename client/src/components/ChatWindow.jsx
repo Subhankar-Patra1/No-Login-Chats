@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +9,9 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const [messages, setMessages] = useState(room.initialMessages || []); 
     const [isExpired, setIsExpired] = useState(false);
     const [replyTo, setReplyTo] = useState(null); 
-    // const [showInfoModal, setShowInfoModal] = useState(false); 
+    const [editingMessage, setEditingMessage] = useState(null);
+    const [typingUsers, setTypingUsers] = useState([]);
+    const typingTimeoutsRef = useRef({});
 
     const handleLeave = async () => {
         if (!confirm('Are you sure you want to leave this group?')) return;
@@ -54,6 +56,13 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             console.log('Received new_message:', msg, 'Current room:', room.id);
             // [MODIFIED] Robust comparison for room ID (string vs number)
             if (String(msg.room_id) === String(room.id)) {
+                // Clear typing indicator for this user if they sent a message
+                setTypingUsers(prev => prev.filter(u => u.userId !== msg.user_id));
+                if (typingTimeoutsRef.current[msg.user_id]) {
+                    clearTimeout(typingTimeoutsRef.current[msg.user_id]);
+                    delete typingTimeoutsRef.current[msg.user_id];
+                }
+
                 setMessages(prev => {
                     // [MODIFIED] Check for strict duplicates by ID first
                     // This handles the case where the sender receives their own message back from the server
@@ -129,14 +138,71 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             ));
         };
 
+        const handleMessageEdited = (updatedMsg) => {
+             if (String(updatedMsg.room_id) === String(room.id)) {
+                 setMessages(prev => prev.map(msg => {
+                     if (msg.id === updatedMsg.id) {
+                         // Update content and edit info, keep other fields like replyTo, user info
+                         return { 
+                             ...msg, 
+                             content: updatedMsg.content,
+                             edited_at: updatedMsg.edited_at,
+                             edit_version: updatedMsg.edit_version
+                         };
+                     }
+                     return msg;
+                 }));
+             }
+        };
+
+        const handleTypingStart = ({ room_id, user_id, user_name }) => {
+             if (String(room_id) !== String(room.id)) return;
+             
+             // Clear existing timeout
+             if (typingTimeoutsRef.current[user_id]) {
+                 clearTimeout(typingTimeoutsRef.current[user_id]);
+             }
+
+             // Add user if not present
+             setTypingUsers(prev => {
+                 if (prev.some(u => u.userId === user_id)) return prev;
+                 return [...prev, { userId: user_id, name: user_name }];
+             });
+
+             // Set new timeout (auto remove after 4s)
+             typingTimeoutsRef.current[user_id] = setTimeout(() => {
+                 setTypingUsers(prev => prev.filter(u => u.userId !== user_id));
+                 delete typingTimeoutsRef.current[user_id];
+             }, 4000);
+        };
+
+        const handleTypingStop = ({ room_id, user_id }) => {
+             if (String(room_id) !== String(room.id)) return;
+             
+             if (typingTimeoutsRef.current[user_id]) {
+                 clearTimeout(typingTimeoutsRef.current[user_id]);
+                 delete typingTimeoutsRef.current[user_id];
+             }
+             setTypingUsers(prev => prev.filter(u => u.userId !== user_id));
+        };
+
         socket.on('new_message', handleNewMessage);
         socket.on('messages_status_update', handleStatusUpdate);
         socket.on('message_deleted', handleMessageDeleted);
+        socket.on('message_edited', handleMessageEdited);
+        socket.on('typing:start', handleTypingStart);
+        socket.on('typing:stop', handleTypingStop);
 
         return () => {
             socket.off('new_message', handleNewMessage);
             socket.off('messages_status_update', handleStatusUpdate);
             socket.off('message_deleted', handleMessageDeleted);
+            socket.off('message_edited', handleMessageEdited);
+            socket.off('typing:start', handleTypingStart);
+            socket.off('typing:stop', handleTypingStop);
+            
+            // Clear all timeouts
+            Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
         };
     }, [socket, room, token]);
 
@@ -268,6 +334,90 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     };
 
+    const handleEditMessage = async (msgId, newContent) => {
+        // Optimistic update
+        setMessages(prev => prev.map(m => 
+            m.id === msgId 
+            ? { ...m, content: newContent, edited_at: new Date().toISOString(), edit_version: (m.edit_version || 0) + 1 } 
+            : m
+        ));
+        setEditingMessage(null);
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/messages/${msgId}/edit`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({ new_content: newContent })
+            });
+            if (!res.ok) {
+                console.error("Edit failed");
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const getTypingText = () => {
+        if (typingUsers.length === 0) return null;
+        if (room.type === 'direct') return "is typing..."; // Direct chat usually just one other person
+        
+        if (typingUsers.length === 1) return `${typingUsers[0].name} is typing...`;
+        if (typingUsers.length === 2) return `${typingUsers[0].name} and ${typingUsers[1].name} are typing...`;
+        return `${typingUsers[0].name}, ${typingUsers[1].name}, and ${typingUsers.length - 2} others are typing...`;
+    };
+
+    const handleSendGif = async (gif, caption) => { // Removed default 'GIF'
+        const tempId = `temp-${Date.now()}`;
+        // gif object structure from tenor.js: { id, title, preview_url, gif_url, mp4_url, url, type, width, height }
+        const finalGifUrl = gif.mp4_url || gif.gif_url;
+        const finalPreviewUrl = gif.preview_url || gif.gifpreview;
+        
+        const tempMsg = {
+            id: tempId,
+            room_id: room.id,
+            user_id: user.id,
+            type: 'gif', // Database type is 'gif', but content might be mp4 url
+            content: caption || null, // Prompt req: content || null
+            gif_url: finalGifUrl,
+            preview_url: finalPreviewUrl,
+            width: gif.width,
+            height: gif.height,
+            created_at: new Date().toISOString(),
+            username: user.username,
+            display_name: user ? user.display_name : 'Me',
+            status: 'sending'
+        };
+        setMessages(prev => [...prev, tempMsg]);
+
+        try {
+            await fetch(`${import.meta.env.VITE_API_URL}/api/messages`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({
+                    room_id: room.id,
+                    content: caption || null,
+                    type: 'gif',
+                    gif_url: finalGifUrl,
+                    preview_url: finalPreviewUrl,
+                    width: gif.width,
+                    height: gif.height,
+                    tempId
+                })
+            });
+        } catch (err) {
+            console.error(err);
+            setMessages(prev => prev.map(m => 
+                m.id === tempId ? { ...m, status: 'error' } : m
+            ));
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-950 relative overflow-hidden">
             {/* Background Pattern */}
@@ -328,18 +478,33 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 socket={socket} 
                 onReply={setReplyTo} 
                 onDelete={handleLocalDelete}
-                onRetry={handleRetryAudio} // [NEW] Pass retry handler
+                onRetry={handleRetryAudio} 
+                onEdit={setEditingMessage} // [NEW]
             />
             
+            {/* Typing Indicator */}
+            {typingUsers.length > 0 && (
+                <div className="px-4 py-2 text-xs text-slate-400 font-medium italic animate-pulse flex items-center gap-1 z-10 bg-slate-900/30 backdrop-blur-sm">
+                    <span className="material-symbols-outlined text-[14px] animate-bounce">more_horiz</span>
+                    {getTypingText()}
+                </div>
+            )}
+
             <MessageInput 
                 onSend={(content) => handleSend(content, replyTo)} 
-                onSendAudio={(blob, duration, waveform) => handleSendAudio(blob, duration, waveform, replyTo)} // [MODIFIED] Use handler
+                onSendAudio={(blob, duration, waveform) => handleSendAudio(blob, duration, waveform, replyTo)}
+                onSendGif={handleSendGif} // [NEW]
                 disabled={isExpired} 
                 replyTo={replyTo}          
-                setReplyTo={setReplyTo}    
+                setReplyTo={setReplyTo}
+                
+                // [NEW] Props for editing and typing
+                editingMessage={editingMessage}
+                onCancelEdit={() => setEditingMessage(null)}
+                onEditMessage={handleEditMessage}
+                onTypingStart={() => socket?.emit('typing:start', { roomId: room.id })}
+                onTypingStop={() => socket?.emit('typing:stop', { roomId: room.id })}
             />
-
-
         </div>
     );
 }

@@ -36,6 +36,9 @@ app.use('/api/rooms', roomRoutes);
 const messageRoutes = require('./messages');
 app.use('/api/messages', messageRoutes);
 
+const tenorRoutes = require('./tenor');
+app.use('/api/gifs', tenorRoutes);
+
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error("Global Error Handler:", err.name, err.message, err.stack);
@@ -186,6 +189,23 @@ io.on('connection', async (socket) => {
         } catch (err) {
             console.error('Error marking seen:', err);
         }
+    });
+
+    socket.on('typing:start', ({ roomId }) => {
+        // Broadcast to room excluding sender
+        socket.to(`room:${roomId}`).emit('typing:start', {
+            room_id: roomId,
+            user_id: socket.user.id,
+            user_name: socket.user.display_name || socket.user.username, // Use display name if available
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    socket.on('typing:stop', ({ roomId }) => {
+        socket.to(`room:${roomId}`).emit('typing:stop', {
+            room_id: roomId,
+            user_id: socket.user.id
+        });
     });
 
     socket.on('disconnect', () => {

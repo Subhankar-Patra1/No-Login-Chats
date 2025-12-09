@@ -93,6 +93,87 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
     }
 });
 
+// Create new message (Text or GIF)
+router.post('/', async (req, res) => {
+    try {
+        const { room_id, type = 'text', content, gif_url, preview_url, width, height, tempId } = req.body;
+        
+        // Basic validation
+        if (!room_id) return res.status(400).json({ error: 'room_id is required' });
+        
+        // Verify room membership
+        const memberRes = await db.query('SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2', [room_id, req.user.id]);
+        if (!memberRes.rows[0]) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // Check room expiry
+        const roomRes = await db.query('SELECT expires_at FROM rooms WHERE id = $1', [room_id]);
+        if (roomRes.rows[0]?.expires_at && new Date(roomRes.rows[0].expires_at) < new Date()) {
+            return res.status(400).json({ error: 'Room expired' });
+        }
+
+        let query = '';
+        let params = [];
+
+        if (type === 'gif') {
+            query = `
+                INSERT INTO messages (room_id, user_id, type, content, gif_url, preview_url, width, height)
+                VALUES ($1, $2, 'gif', $3, $4, $5, $6, $7)
+                RETURNING id, status, to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at
+            `;
+            // Content is optional for GIF, but let's store "GIF" or something if empty? Prompt says "leave content optional".
+            // If DB column not null default 'text', we might need something? 
+            // In migration, I added default 'text' for type, but content?
+            // Existing schema likely has content NOT NULL? I should check or provide default.
+            // Let's provide "GIF" as fallback content for notifications/previews if `content` is empty.
+            params = [room_id, req.user.id, content || 'GIF', gif_url, preview_url, width, height];
+        } else {
+            // Fallback for text if we move text sending to REST later, though socket handles it now.
+            query = `
+                INSERT INTO messages (room_id, user_id, content) 
+                VALUES ($1, $2, $3) 
+                RETURNING id, status, to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at
+            `;
+            params = [room_id, req.user.id, content];
+        }
+
+        const result = await db.query(query, params);
+        const info = result.rows[0];
+
+        // Fetch user info for broadcast
+        const userRes = await db.query('SELECT display_name FROM users WHERE id = $1', [req.user.id]);
+        const user = userRes.rows[0];
+
+        const message = {
+            id: info.id,
+            room_id,
+            user_id: req.user.id,
+            type: type,
+            content: content || (type === 'gif' ? 'GIF' : ''),
+            gif_url,
+            preview_url,
+            width,
+            height,
+            status: info.status,
+            created_at: info.created_at,
+            username: req.user.username,
+            display_name: user ? user.display_name : req.user.display_name,
+            tempId
+        };
+
+        // Broadcast
+        const io = req.app.get('io');
+        io.to(`room:${room_id}`).emit('new_message', message);
+
+        res.json(message);
+
+    } catch (err) {
+        console.error('Error creating message:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // Delete for me
 router.delete('/:id/for-me', async (req, res) => {
     const messageId = req.params.id;
@@ -173,6 +254,62 @@ router.post('/:id/audio-heard', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Error marking audio as heard:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Edit message
+router.put('/:id/edit', async (req, res) => {
+    const messageId = req.params.id;
+    const userId = req.user.id;
+    const { new_content } = req.body;
+
+    try {
+        // 1. Fetch message and verify ownership
+        const msgRes = await db.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        if (msgRes.rows.length === 0) return res.status(404).json({ error: 'Message not found' });
+        
+        const message = msgRes.rows[0];
+        
+        // Ownership check
+        if (message.user_id !== userId) {
+            return res.status(403).json({ error: 'Not authorized to edit this message' });
+        }
+
+        // Constraints check
+        if (message.type !== 'text') {
+             return res.status(400).json({ error: 'Only text messages can be edited' });
+        }
+        if (message.is_deleted_for_everyone) {
+            return res.status(400).json({ error: 'Cannot edit deleted message' });
+        }
+
+        // 2. Update
+        const updateRes = await db.query(`
+            UPDATE messages 
+            SET content = $1, edited_at = NOW(), edit_version = edit_version + 1
+            WHERE id = $2
+            RETURNING id, content, edited_at, edit_version, room_id, user_id, type, reply_to_message_id, created_at
+        `, [new_content, messageId]);
+
+        const updatedMsg = updateRes.rows[0];
+
+        // 3. Broadcast
+        // Need display name for the event payload consistency, though client might just patch
+        // We'll send the essential update fields
+        const io = req.app.get('io');
+        io.to(`room:${updatedMsg.room_id}`).emit('message_edited', {
+            id: updatedMsg.id,
+            room_id: updatedMsg.room_id,
+            content: updatedMsg.content,
+            edited_at: updatedMsg.edited_at,
+            edit_version: updatedMsg.edit_version
+        });
+
+        res.json(updatedMsg);
+
+    } catch (err) {
+        console.error('Error editing message:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });

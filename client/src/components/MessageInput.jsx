@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import EmojiPicker, { EmojiStyle } from 'emoji-picker-react';
+
+import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
 import useAudioRecorder from '../utils/useAudioRecorder';
 
@@ -11,12 +12,41 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, setReplyTo }) {
+export default function MessageInput({ 
+    onSend, 
+    onSendAudio, 
+    disabled, 
+    replyTo, 
+    setReplyTo,
+    onSendGif,
+    editingMessage,
+    onCancelEdit,
+    onEditMessage,
+    onTypingStart,
+    onTypingStop
+}) {
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
     const pickerRef = useRef(null);
     const editorRef = useRef(null);
     const lastRange = useRef(null);
+    const [pendingGif, setPendingGif] = useState(null);
+
+    // Typing throttle refs
+    const lastTypingTime = useRef(0);
+    const typingTimeoutRef = useRef(null);
+
+    // Populate input when editing
+    useEffect(() => {
+        if (editingMessage) {
+            setHtml(editingMessage.content);
+            if (editorRef.current) editorRef.current.focus();
+        } else {
+            if (!editingMessage && html === editingMessage?.content) {
+                setHtml('');
+            }
+        }
+    }, [editingMessage]);
 
     // Audio Recorder
     const { 
@@ -112,8 +142,8 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
         
         const domHtml = editorRef.current?.innerHTML || "";
         let content = domHtml;
-        if (!content.trim()) return;
 
+        // Strip HTML (keep simple logic or improve later)
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = content;
         
@@ -136,12 +166,43 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
         plainText = plainText.replace(/\r\n/g, "\n");
         plainText = plainText.trimEnd();
 
-        if (plainText) {
-            onSend(plainText);
+        // Handle GIF send
+        if (pendingGif) {
+            // Send GIF with plainText as caption (if any)
+            onSendGif(pendingGif, plainText); 
+            
+            // Cleanup
+            setPendingGif(null);
             setHtml('');
             if (editorRef.current) editorRef.current.innerHTML = "";
             setShowEmoji(false);
             lastRange.current = null;
+            onTypingStop?.();
+            clearTimeout(typingTimeoutRef.current);
+            return;
+        }
+
+        if (!content.trim() && !plainText) return; // Don't send empty if no GIF
+
+        if (plainText) {
+            if (editingMessage) {
+                // Handle edit submission
+                if (plainText !== editingMessage.content) {
+                    onEditMessage(editingMessage.id, plainText);
+                } else {
+                    onCancelEdit();
+                }
+            } else {
+                onSend(plainText);
+            }
+            
+            // Cleanup
+            setHtml('');
+            if (editorRef.current) editorRef.current.innerHTML = "";
+            setShowEmoji(false);
+            lastRange.current = null;
+            onTypingStop?.(); // Stop typing immediately
+            clearTimeout(typingTimeoutRef.current);
         }
     };
 
@@ -163,10 +224,39 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
         saveSelection(); 
     };
 
+    const handleGifClick = (gif) => {
+        setPendingGif(gif);
+        setShowEmoji(false);
+        if (editorRef.current) editorRef.current.focus();
+    };
+
+    const handleRemoveGif = () => {
+        setPendingGif(null);
+    };
+
     const handleChange = (evt) => {
         const newHtml = evt.target.value ?? evt.target.innerHTML;
         setHtml(newHtml);
         saveSelection();
+
+        // Typing Detection
+        if (!editingMessage && onTypingStart && onTypingStop) {
+             const now = Date.now();
+             
+             // Emit start if not throttled
+             if (now - lastTypingTime.current > 2000) {
+                 onTypingStart();
+                 lastTypingTime.current = now;
+             }
+
+             // Reset stop timeout
+             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+             
+             // Stop after 3 seconds of inactivity
+             typingTimeoutRef.current = setTimeout(() => {
+                 onTypingStop();
+             }, 3000);
+        }
     };
 
     const handlePaste = (e) => {
@@ -247,11 +337,45 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
         );
     }
 
+    // Logic for placeholder vs send button
+    // hasText: strictly for checking if text exists (controls placeholder)
+    const hasText = html.replace(/<[^>]*>/g, '').trim().length > 0 || html.includes('<img');
+    
+    // hasContent: logic for enabling send button (either text OR gif)
+    const hasContent = hasText || pendingGif;
+
     return (
         <div className="p-4 bg-slate-900/50 backdrop-blur-md border-t border-slate-800/50 z-10 relative">
             <form onSubmit={handleSubmit} className="flex gap-3 max-w-4xl mx-auto items-end">
                 <div className="flex-1 flex flex-col gap-1">
-                    {replyTo && (
+                    {/* Editing Bar */}
+                    {editingMessage && (
+                         <div className="
+                            w-full
+                            flex justify-between items-center
+                            bg-slate-800/80 border border-slate-700
+                            rounded-t-2xl rounded-b-md
+                            px-4 py-2
+                         ">
+                             <div className="flex flex-col">
+                                 <span className="text-sm font-bold text-violet-300">Editing message</span>
+                             </div>
+                             <div className="flex gap-2">
+                                 <button
+                                     onClick={() => {
+                                         setHtml(''); /* Clear or reset */
+                                         onCancelEdit();
+                                     }}
+                                     className="text-xs px-2 py-1 bg-slate-700/50 hover:bg-slate-700 rounded text-slate-300"
+                                     type="button"
+                                 >
+                                     Cancel
+                                 </button>
+                             </div>
+                         </div>
+                    )}
+                    
+                    {!editingMessage && replyTo && (
                         <div className="
                             w-full
                             flex justify-between items-start
@@ -289,22 +413,46 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
                         relative bg-slate-800/50 border border-slate-700 focus-within:ring-2 focus-within:ring-violet-500/50 focus-within:border-violet-500/50 transition-all flex flex-col
                         ${replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} 
                     `}>
+                        {/* Pending GIF Preview */}
+                        {pendingGif && (
+                             <div className="p-3 border-b border-slate-700/50 bg-slate-800/30 rounded-t-2xl flex justify-center relative">
+                                 <div className="composer-gif-preview rounded-xl relative inline-block group">
+                                     <video
+                                         src={pendingGif.mp4_url || pendingGif.gif_url}
+                                         className="w-[220px] h-auto rounded-md shadow-lg bg-black/50 ring-1 ring-white/10"
+                                         autoPlay
+                                         muted
+                                         loop
+                                         playsInline
+                                         controls={false}
+                                         onClick={(e) => {
+                                             if (e.target.paused) e.target.play();
+                                             else e.target.pause();
+                                         }}
+                                     />
+                                     <button 
+                                        onClick={handleRemoveGif}
+                                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-all backdrop-blur-md shadow-sm"
+                                        title="Remove GIF"
+                                     >
+                                        <span className="material-symbols-outlined text-[16px] font-bold">close</span>
+                                     </button>
+                                 </div>
+                             </div>
+                        )}
                         {showEmoji && (
                             <div 
-                                className="fixed bottom-[80px] left-1/2 -translate-x-1/2 z-50 shadow-2xl rounded-xl w-[90vw] sm:w-[350px] sm:left-auto sm:right-4 sm:translate-x-0" 
+                                className="fixed bottom-[80px] left-1/2 -translate-x-1/2 z-50 shadow-2xl rounded-xl w-[90vw] sm:w-[400px] sm:absolute sm:bottom-full sm:mb-2 sm:left-auto sm:right-0 sm:translate-x-0 overflow-hidden" 
                                 ref={pickerRef}
                             >
-                                <EmojiPicker 
-                                    theme="dark" 
+                                <PickerPanel 
                                     onEmojiClick={handleEmojiClick}
-                                    emojiStyle={EmojiStyle.APPLE}
-                                    width="100%"
-                                    height={350}
+                                    onGifClick={handleGifClick}
                                 />
                             </div>
                         )}
                         
-                        <div className="flex items-end">
+                        <div className="flex items-end relative">
                             <ContentEditable
                                 innerRef={editorRef}
                                 html={html}
@@ -318,9 +466,14 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
                                 tagName="div"
                             />
                             
-                            {!html && (
+                            {!hasText && (
                                 <div className="absolute left-4 top-3 text-slate-500 pointer-events-none select-none">
-                                    {disabled ? "Room expired..." : "Type a message..."}
+                                    {disabled 
+                                        ? "Room expired..." 
+                                        : pendingGif 
+                                            ? "Enter caption (optional)..." 
+                                            : "Type a message..."
+                                    }
                                 </div>
                             )}
 
@@ -342,7 +495,7 @@ export default function MessageInput({ onSend, onSendAudio, disabled, replyTo, s
                     </div>
                 </div>
 
-                {html.trim() ? (
+                {hasContent ? (
                     <button 
                         type="submit" 
                         className={`

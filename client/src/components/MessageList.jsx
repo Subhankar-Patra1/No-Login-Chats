@@ -11,7 +11,7 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard }) => {
+const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit }) => {
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef(null);
     const { token, user } = useAuth(); 
@@ -22,6 +22,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
         setShowMenu(prev => !prev);
     };
 
+    // ... (rest of useEffects) ... 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -37,6 +38,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
         };
     }, [showMenu]);
 
+    // ... (rest of functions) ...
     const scrollToMessage = (id) => {
         const el = document.getElementById(`msg-${id}`);
         if (!el) return;
@@ -149,6 +151,11 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                         <span className="material-symbols-outlined text-[14px]">mic</span>
                                         <span>Voice message • {formatDuration(msg.replyTo.audio_duration_ms)}</span>
                                     </div>
+                                ) : msg.replyTo.type === 'gif' ? (
+                                    <div className="flex items-center gap-1 text-xs opacity-90">
+                                        <span className="material-symbols-outlined text-[14px]">gif</span>
+                                        <span>GIF</span>
+                                    </div>
                                 ) : (
                                     <div className="text-xs opacity-80 line-clamp-2">
                                         {msg.replyTo.text}
@@ -192,9 +199,46 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     />
                                 )}
                             </div>
+                        ) : msg.type === 'gif' ? (
+                            <>
+                            <div className="relative group/gif mt-1 mb-1 max-w-[200px] sm:max-w-[300px]">
+                                {msg.gif_url && msg.gif_url.endsWith('.mp4') ? (
+                                    <video 
+                                        src={msg.gif_url} 
+                                        className="w-full h-auto object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                        autoPlay 
+                                        muted 
+                                        loop 
+                                        playsInline
+                                        onClick={() => window.open(msg.gif_url, '_blank')}
+                                    />
+                                ) : (
+                                    <img 
+                                        src={msg.preview_url || msg.gif_url} 
+                                        alt="GIF" 
+                                        className="w-full h-auto object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                        loading="lazy"
+                                        onClick={() => window.open(msg.gif_url, '_blank')}
+                                        title="Open full size"
+                                    />
+                                )}
+                                {/* Label for GIF type if needed, or just let it be visual */}
+                                <div className="absolute bottom-1 right-1 bg-black/50 text-white text-[9px] px-1 rounded uppercase font-bold tracking-wider pointer-events-none">
+                                    GIF
+                                </div>
+                            </div>
+                            {msg.content && msg.content !== 'GIF' && (
+                                <p className="text-sm mt-1 whitespace-pre-wrap break-words">
+                                    {linkifyText(msg.content)}
+                                </p>
+                            )}
+                            </>
                         ) : (
                             <p className="pr-10">
                                 {linkifyText(msg.content)}
+                                {msg.edited_at && (
+                                    <span className="text-[10px] opacity-60 ml-1">(edited)</span>
+                                )}
                             </p>
                         )}
                         
@@ -263,7 +307,22 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 <span className="material-symbols-outlined text-base">reply</span>
                                 <span>Reply</span>
                             </button>
-                            
+
+                            {/* [NEW] Edit Option */}
+                            {isMe && !isAudio && msg.type !== 'gif' && !msg.is_deleted_for_everyone && (
+                                <button 
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEdit(msg);
+                                        setShowMenu(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">edit</span>
+                                    <span>Edit</span>
+                                </button>
+                            )}
+
                             {isAudio && msg.status !== 'error' ? (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
@@ -274,7 +333,21 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 </button>
                             ) : null}
 
-                            {!isAudio && (
+                            {msg.type === 'gif' && (
+                                <button 
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(msg.gif_url);
+                                        setShowMenu(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">link</span>
+                                    <span>Copy Link</span>
+                                </button>
+                            )}
+
+                            {msg.type !== 'audio' && msg.type !== 'gif' && (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-100 hover:bg-slate-800"
                                     onClick={(e) => {
@@ -325,9 +398,14 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry }) {
+export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit }) { // [MODIFIED] Added onEdit
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
+
+    const [showScrollButton, setShowScrollButton] = useState(false);
+    const scrollRef = useRef(null);
+    const bottomRef = useRef(null);
+    const shouldScrollToBottom = useRef(true);
 
     const handleMarkHeard = async (messageId) => {
         // Optimistic update
@@ -372,10 +450,6 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
             console.error(err);
         }
     }
-    const [showScrollButton, setShowScrollButton] = useState(false);
-    const scrollRef = useRef(null);
-    const bottomRef = useRef(null);
-    const shouldScrollToBottom = useRef(true);
 
     useEffect(() => {
         shouldScrollToBottom.current = true;
@@ -431,37 +505,38 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                 {messages.map((msg, index) => {
                     const isMe = msg.user_id === currentUser.id;
                     const isSystem = msg.type === 'system';
-
+                    
                     if (isSystem) {
-                        let icon = 'info';
-                        let textColor = 'text-slate-400';
+                         // ... (keep system message logic)
+                         let icon = 'info';
+                         let textColor = 'text-slate-400';
 
-                        if (msg.content.includes('joined')) {
-                            icon = 'login';
-                            textColor = 'text-emerald-400';
-                        } else if (msg.content.includes('left')) {
-                            icon = 'logout'; 
-                            textColor = 'text-amber-400';
-                        } else if (msg.content.includes('removed')) {
-                            icon = 'person_remove';
-                            textColor = 'text-red-400';
-                        }
-
-                        return (
-                            <div key={msg.id || index} className="flex justify-center my-6 group/system animate-slide-in-up">
-                                <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/40 border border-slate-800/50 backdrop-blur-sm transition-all hover:bg-slate-900/60 hover:border-slate-700">
-                                    <span className={`material-symbols-outlined text-[16px] ${textColor}`}>
-                                        {icon}
-                                    </span>
-                                    <span className="text-xs text-slate-400 font-medium">
-                                        {msg.content}
-                                    </span>
-                                    <span className="text-[10px] text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">
-                                        {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                                    </span>
-                                </div>
-                            </div>
-                        );
+                         if (msg.content.includes('joined')) {
+                             icon = 'login';
+                             textColor = 'text-emerald-400';
+                         } else if (msg.content.includes('left')) {
+                             icon = 'logout'; 
+                             textColor = 'text-amber-400';
+                         } else if (msg.content.includes('removed')) {
+                             icon = 'person_remove';
+                             textColor = 'text-red-400';
+                         }
+ 
+                         return (
+                             <div key={msg.id || index} className="flex justify-center my-6 group/system animate-slide-in-up">
+                                 <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/40 border border-slate-800/50 backdrop-blur-sm transition-all hover:bg-slate-900/60 hover:border-slate-700">
+                                     <span className={`material-symbols-outlined text-[16px] ${textColor}`}>
+                                         {icon}
+                                     </span>
+                                     <span className="text-xs text-slate-400 font-medium">
+                                         {msg.content}
+                                     </span>
+                                     <span className="text-[10px] text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">
+                                         {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                     </span>
+                                 </div>
+                             </div>
+                         );
                     }
 
                     return (
@@ -474,13 +549,15 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onDeleteForEveryone={(msg) => setConfirmDeleteMessage(msg)}
                             onRetry={onRetry}
                             onMarkHeard={handleMarkHeard}
+                            onEdit={onEdit} // [NEW] Pass onEdit
                         />
                     );
                 })}
 
                 <div ref={bottomRef} />
             </div>
-
+            
+            {/* ... (rest of scroll button and delete modal) ... */}
             <button
                 onClick={scrollToBottom}
                 className={`

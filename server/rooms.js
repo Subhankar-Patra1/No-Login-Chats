@@ -235,6 +235,7 @@ router.get('/:id/messages', async (req, res) => {
             SELECT m.id, m.room_id, m.user_id, m.content, m.type, m.status, m.reply_to_message_id, 
                    m.is_deleted_for_everyone, m.deleted_for_user_ids,
                    m.audio_url, m.audio_duration_ms, m.audio_waveform,
+                   m.gif_url, m.preview_url, m.width, m.height,
                    (aps.heard_at IS NOT NULL) as audio_heard,
                    to_char(m.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at,
                    u.display_name, u.username 
