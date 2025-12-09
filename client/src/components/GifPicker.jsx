@@ -168,6 +168,7 @@ export default function GifPicker({ onSendGif }) {
                     />
                     {search && (
                         <button 
+                            type="button"
                             onClick={() => setSearch('')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                         >
@@ -182,6 +183,7 @@ export default function GifPicker({ onSendGif }) {
                 <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-1 no-scrollbar">
                     {filters.map(f => (
                         <button
+                            type="button"
                             key={f}
                             onClick={() => handleFilterClick(f)}
                             className="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 hover:border-violet-500/50 transition-all whitespace-nowrap"
@@ -201,6 +203,7 @@ export default function GifPicker({ onSendGif }) {
                 <div className="grid grid-cols-4 gap-3">
                     {gifs.map(gif => (
                         <button
+                            type="button"
                             key={gif.id}
                             onClick={() => onSendGif(gif)}
                             className="gif-tile relative aspect-square rounded-md overflow-hidden group bg-slate-900/30 border border-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500 hover:shadow-lg transition-all"
@@ -240,6 +243,7 @@ export default function GifPicker({ onSendGif }) {
                         <span className="material-symbols-outlined text-3xl mb-2">error</span>
                         <p>{error}</p>
                         <button 
+                            type="button"
                             onClick={() => setSearch(s => s ? s : ' ')} // trigger effect
                             className="mt-3 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-300 px-3 py-1 rounded-md border border-red-500/20 transition-colors"
                         >

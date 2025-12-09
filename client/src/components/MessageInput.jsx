@@ -440,19 +440,21 @@ export default function MessageInput({
                                  </div>
                              </div>
                         )}
-                        {showEmoji && (
-                            <div 
-                                className="fixed bottom-[80px] left-1/2 -translate-x-1/2 z-50 shadow-2xl rounded-xl w-[90vw] sm:w-[400px] sm:absolute sm:bottom-full sm:mb-2 sm:left-auto sm:right-0 sm:translate-x-0 overflow-hidden" 
-                                ref={pickerRef}
-                            >
-                                <PickerPanel 
-                                    onEmojiClick={handleEmojiClick}
-                                    onGifClick={handleGifClick}
-                                />
-                            </div>
-                        )}
+
                         
                         <div className="flex items-end relative">
+                            {showEmoji && (
+                                <div 
+                                    className="fixed bottom-[80px] left-1/2 -translate-x-1/2 z-50 shadow-2xl rounded-xl w-[90vw] sm:w-[400px] sm:absolute sm:bottom-full sm:mb-2 sm:left-auto sm:right-0 sm:translate-x-0 overflow-hidden" 
+                                    ref={pickerRef}
+                                >
+                                    <PickerPanel 
+                                        onEmojiClick={handleEmojiClick}
+                                        onGifClick={handleGifClick}
+                                        disableGifTab={!!pendingGif}
+                                    />
+                                </div>
+                            )}
                             <ContentEditable
                                 innerRef={editorRef}
                                 html={html}

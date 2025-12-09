@@ -7,6 +7,7 @@ import JoinRoomModal from '../components/JoinRoomModal';
 import GroupInfoModal from '../components/GroupInfoModal';
 import LogoutModal from '../components/LogoutModal';
 import io from 'socket.io-client';
+import { PresenceProvider } from '../context/PresenceContext';
 
 export default function Dashboard() {
     const { user, token, logout } = useAuth();
@@ -300,6 +301,7 @@ export default function Dashboard() {
     };
 
     return (
+        <PresenceProvider socket={socket}>
         <div className={`fixed inset-0 h-[100dvh] w-full bg-gray-900 text-white overflow-hidden flex ${isResizing ? 'select-none cursor-col-resize' : ''} animate-dashboard-entry`}>
             {/* Mobile: Sidebar hidden if activeRoom exists. Desktop: Always visible */}
             <div 
@@ -398,5 +400,6 @@ export default function Dashboard() {
                 />
             )}
         </div>
+        </PresenceProvider>
     );
 }

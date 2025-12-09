@@ -15,6 +15,10 @@
 - **📝 Rich Text Support**: Preserves code blocks, indentation, and newlines exactly as typed.
 - **�📱 Fully Responsive**: a beautiful, mobile-first interface built with TailwindCSS.
 - **🛡️ Secure**: JWT-based authentication and PostgreSQL persistence.
+- **🎤 Voice Notes**: Record and send audio messages with waveform previews.
+- **✏️ Edit Messages**: Fix typos or update sent messages instantly.
+- **🟢 Online Presence**: See who's online and when they were last active.
+- **💬 Typing Indicators**: See when others are typing in real-time.
 
 ## 🛠️ Tech Stack
 
@@ -28,6 +32,7 @@
 - **Node.js & Express**
 - **Socket.io** (WebSockets)
 - **PostgreSQL** (Database)
+- **Redis** (Presence & Session Management)
 - **pg** (Postgres Client)
 
 ## 📦 Getting Started
@@ -37,6 +42,7 @@ Follow these steps to set up the project locally.
 ### Prerequisites
 - Node.js (v18+)
 - PostgreSQL installed and running (or a cloud URL)
+- Redis installed and running (v6+)
 
 ### 1. Clone the Repository
 ```bash
@@ -88,7 +94,11 @@ Visit `http://localhost:5173` in your browser.
 
 ### Server (Render/Railway/Heroku)
 1. Deploy `server/` directory.
-2. Set Environment Variables: `DATABASE_URL`, `JWT_SECRET`, `CLIENT_URL`.
+2. Set Environment Variables:
+    - `DATABASE_URL`
+    - `JWT_SECRET`
+    - `CLIENT_URL`
+    - `REDIS_URL` (Required for online status/presence)
 3. Use Build Command: `npm install`.
 4. Use Start Command: `node index.js`.
 

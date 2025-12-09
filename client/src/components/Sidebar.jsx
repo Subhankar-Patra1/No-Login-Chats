@@ -1,37 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { usePresence } from '../context/PresenceContext';
+import StatusDot from './StatusDot';
 import ProfileShareModal from './ProfileShareModal';
+import ProfileCard from './ProfileCard';
 
 
 export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, onCreateRoom, onJoinRoom, user, onLogout }) {
+    const { presenceMap, fetchStatuses } = usePresence();
     const [tab, setTab] = useState('group'); // 'group' or 'direct'
     const [showShareProfile, setShowShareProfile] = useState(false);
+    const [showMyProfile, setShowMyProfile] = useState(false);
+    const myProfileRef = useRef(null);
 
 
     const filteredRooms = rooms.filter(r => r.type === tab);
+    
+    // Fetch status for direct chat users
+    useEffect(() => {
+        const userIds = rooms
+            .filter(r => r.type === 'direct' && r.other_user_id)
+            .map(r => r.other_user_id);
+            
+        if (userIds.length > 0) {
+            fetchStatuses(userIds);
+        }
+    }, [rooms]);
 
     return (
         <div className="w-full h-full bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 flex flex-col shadow-2xl">
             {/* Header */}
             <div className="p-6 border-b border-slate-800/50 flex justify-between items-center bg-slate-900/30">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-violet-500/20">
-                        {user.display_name[0].toUpperCase()}
-                    </div>
-                    <div>
-                        <h2 className="font-bold text-slate-100 truncate max-w-[100px]">{user.display_name}</h2>
-                        <div className="flex items-center gap-1">
-                            <p className="text-xs text-slate-400 font-medium">
-                                {user.username.startsWith('@') ? user.username : `@${user.username}`}
-                            </p>
-                            <button 
-                                onClick={() => setShowShareProfile(true)}
-                                className="text-slate-500 hover:text-white transition-colors"
-                                title="Share Profile"
-                            >
-                                <span className="material-symbols-outlined text-[14px]">qr_code_2</span>
-                            </button>
+                    <div 
+                        className="flex items-center gap-3 cursor-pointer"
+                        ref={myProfileRef}
+                        onClick={() => setShowMyProfile(!showMyProfile)}
+                    >
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-violet-500/20">
+                            {user.display_name[0].toUpperCase()}
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-slate-100 truncate max-w-[100px]">{user.display_name}</h2>
+                            <div className="flex items-center gap-1">
+                                <p className="text-xs text-slate-400 font-medium">
+                                    {user.username.startsWith('@') ? user.username : `@${user.username}`}
+                                </p>
+                            </div>
                         </div>
                     </div>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowShareProfile(true);
+                        }}
+                        className="text-slate-500 hover:text-white transition-colors"
+                        title="Share Profile"
+                    >
+                        <span className="material-symbols-outlined text-[14px]">qr_code_2</span>
+                    </button>
                 </div>
                 <button 
                     onClick={onLogout} 
@@ -93,6 +119,9 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                     group
                                 </span>
                             )}
+                            {room.type === 'direct' && room.other_user_id && (
+                                <StatusDot online={presenceMap[room.other_user_id]?.online} />
+                            )}
                         </div>
                         <div className="flex-1 min-w-0 flex justify-between items-center">
                             <div>
@@ -143,10 +172,11 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                 />
             )}
 
-            {showShareProfile && (
-                <ProfileShareModal 
-                    user={user} 
-                    onClose={() => setShowShareProfile(false)} 
+            {showMyProfile && (
+                <ProfileCard
+                    targetUser={user}
+                    anchorRef={myProfileRef}
+                    onClose={() => setShowMyProfile(false)}
                 />
             )}
         </div>

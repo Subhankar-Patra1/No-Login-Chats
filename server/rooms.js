@@ -197,6 +197,7 @@ router.get('/', async (req, res) => {
             SELECT r.*, rm.role, rm.last_read_at,
             (SELECT u.display_name FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1) as other_user_name,
             (SELECT u.username FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1) as other_user_username,
+            (SELECT u.id FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1) as other_user_id,
             (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > rm.last_read_at) as unread_count
             FROM rooms r 
             JOIN room_members rm ON r.id = rm.room_id 
@@ -210,7 +211,8 @@ router.get('/', async (req, res) => {
         const mappedRooms = rooms.map(r => ({
             ...r,
             name: r.type === 'direct' ? (r.other_user_name || 'Unknown User') : r.name,
-            username: r.type === 'direct' ? r.other_user_username : null
+            username: r.type === 'direct' ? r.other_user_username : null,
+            other_user_id: r.type === 'direct' ? r.other_user_id : null
         }));
 
         res.json(mappedRooms);

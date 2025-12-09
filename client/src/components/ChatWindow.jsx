@@ -2,9 +2,33 @@ import { useState, useEffect, useRef } from 'react';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useAuth } from '../context/AuthContext';
+import { usePresence } from '../context/PresenceContext';
+import ProfileCard from './ProfileCard'; // Will create next
+// [MODIFIED] Added timeAgo helper (already present, just ensuring it stays)
+
+const timeAgo = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+    
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    
+    return date.toLocaleDateString();
+};
 
 export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo }) {
     const { token } = useAuth();
+    const { presenceMap, fetchStatuses } = usePresence();
+    const [showProfileCard, setShowProfileCard] = useState(false);
+    // [REMOVED] headerAvatarRef no longer needed
+    
     // [MODIFIED] Initialize with props instead of empty array
     const [messages, setMessages] = useState(room.initialMessages || []); 
     const [isExpired, setIsExpired] = useState(false);
@@ -33,6 +57,17 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
              setMessages(room.initialMessages);
         }
     }, [room.initialMessages]);
+
+    // Fetch status if direct chat
+    useEffect(() => {
+        if (room.type === 'direct' && room.other_user_id) {
+            fetchStatuses([room.other_user_id]);
+        }
+    }, [room.id]);
+
+    const otherUserStatus = room.type === 'direct' && room.other_user_id 
+        ? presenceMap[room.other_user_id] 
+        : null;
 
 
     useEffect(() => {
@@ -432,23 +467,51 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     <span className="material-symbols-outlined">arrow_back</span>
                 </button>
 
-                <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 truncate">
-                        {room.type === 'group' && (
-                            <span className="material-symbols-outlined text-violet-400 shrink-0">tag</span>
+                <div 
+                    className="flex-1 min-w-0 cursor-pointer flex items-center gap-3" 
+                    onClick={() => {
+                        if (room.type === 'direct') setShowProfileCard(!showProfileCard);
+                        else setShowGroupInfo(true);
+                    }}
+                >
+                    {/* [NEW] Header Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white shadow-lg shrink-0">
+                        {room.type === 'direct' 
+                            ? room.display_name?.[0]?.toUpperCase() || room.name?.[0]?.toUpperCase()
+                            : '#'
+                        }
+                    </div>
+
+                    <div className="min-w-0">
+                        <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2 truncate">
+                            {room.type === 'group' && (
+                                <span className="material-symbols-outlined text-violet-400 shrink-0">tag</span>
+                            )}
+                            <span className="truncate">{room.name}</span>
+                            {room.type === 'group' && (
+                                <span className="text-xs bg-slate-800 px-2 py-1 rounded-md text-slate-400 font-mono border border-slate-700 ml-2 shrink-0">
+                                    {room.code}
+                                </span>
+                            )}
+                        </h2>
+                        {room.type === 'direct' && room.username && (
+                            <p className="text-xs text-slate-400 font-medium truncate">
+                                {room.username.startsWith('@') ? room.username : `@${room.username}`}
+                            </p>
                         )}
-                        <span className="truncate">{room.name}</span>
-                        {room.type === 'group' && (
-                            <span className="text-xs bg-slate-800 px-2 py-1 rounded-md text-slate-400 font-mono border border-slate-700 ml-2 shrink-0">
-                                {room.code}
-                            </span>
+                        
+                        {room.type === 'direct' && otherUserStatus && (
+                            <div className="text-xs font-medium mt-0.5">
+                                {otherUserStatus.online ? (
+                                    <span className="text-green-400">Online now</span>
+                                ) : otherUserStatus.last_seen ? (
+                                    <span className="text-slate-500">Last seen {timeAgo(otherUserStatus.last_seen)}</span>
+                                ) : (
+                                    <span className="text-slate-600">Offline</span>
+                                )}
+                            </div>
                         )}
-                    </h2>
-                    {room.type === 'direct' && room.username && (
-                        <p className="text-xs text-slate-400 font-medium truncate">
-                            {room.username.startsWith('@') ? room.username : `@${room.username}`}
-                        </p>
-                    )}
+                    </div>
 
                     {room.expires_at && (
                         <p className={`text-xs mt-0.5 flex items-center gap-1 ${isExpired ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -505,6 +568,17 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 onTypingStart={() => socket?.emit('typing:start', { roomId: room.id })}
                 onTypingStop={() => socket?.emit('typing:stop', { roomId: room.id })}
             />
+
+            {showProfileCard && room.type === 'direct' && (
+                <ProfileCard 
+                    targetUser={{
+                        id: room.other_user_id,
+                        display_name: room.name,
+                        username: room.username
+                    }}
+                    onClose={() => setShowProfileCard(false)}
+                />
+            )}
         </div>
     );
 }

@@ -32,7 +32,7 @@ router.post('/signup', async (req, res) => {
         const token = jwt.sign({ id: newUserId, username, display_name: displayName }, JWT_SECRET);
         res.json({ 
             token, 
-            user: { id: newUserId, username, display_name: displayName },
+            user: { id: newUserId, username, display_name: displayName, share_presence: 'everyone' },
             recoveryCode // Return only once
         });
     } catch (error) {
@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign({ id: user.id, username: user.username, display_name: user.display_name }, JWT_SECRET);
-        res.json({ token, user: { id: user.id, username: user.username, display_name: user.display_name } });
+        res.json({ token, user: { id: user.id, username: user.username, display_name: user.display_name, share_presence: user.share_presence } });
     } catch (error) {
         console.error("Login error:", error);
         res.status(500).json({ error: error.message });
@@ -100,7 +100,7 @@ router.get('/me', async (req, res) => {
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        const { rows } = await db.query('SELECT id, username, display_name FROM users WHERE id = $1', [decoded.id]);
+        const { rows } = await db.query('SELECT id, username, display_name, share_presence FROM users WHERE id = $1', [decoded.id]);
         const user = rows[0];
         
         if (!user) return res.status(404).json({ error: 'User not found' });

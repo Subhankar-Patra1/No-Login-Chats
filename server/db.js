@@ -58,6 +58,8 @@ const createTables = async () => {
 
             -- Migration for existing users table
             ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS share_presence TEXT DEFAULT 'everyone'; -- 'everyone'|'contacts'|'nobody'
 
             -- Migration for messages table
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'sent'; -- sent, delivered, seen
