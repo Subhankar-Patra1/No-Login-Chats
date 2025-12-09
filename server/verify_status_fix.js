@@ -4,7 +4,7 @@ async function testStatusEndpoint() {
     try {
         console.log('Testing /api/users/status endpoint...');
         // Test with a sample ID '1'
-        const res = await axios.get('http://localhost:3000/api/users/status?ids=1');
+        const res = await axios.get('https://no-login-chats.onrender.com/api/users/status?ids=1');
 
         if (res.status === 200) {
             console.log('SUCCESS: Endpoint returned 200 OK');

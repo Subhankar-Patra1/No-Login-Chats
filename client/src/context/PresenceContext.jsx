@@ -14,7 +14,7 @@ export const PresenceProvider = ({ children, socket }) => {
     const fetchStatuses = async (userIds) => {
         if (!userIds || userIds.length === 0) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/users/status?ids=${userIds.join(',')}`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/status?ids=${userIds.join(',')}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
