@@ -8,7 +8,7 @@ let REDIS = null;
 // Env configuration
 const API_KEY = process.env.OPENROUTER_API_KEY;
 const MODEL = process.env.AI_MODEL || 'gpt-oss-120b'; // Fallback
-const MAX_TOKENS = parseInt(process.env.AI_MAX_TOKENS || '1024');
+const MAX_TOKENS = parseInt(process.env.AI_MAX_TOKENS || '8192');
 const TEMP = parseFloat(process.env.AI_TEMPERATURE || '0.2');
 const RATE_LIMIT_MIN = parseInt(process.env.AI_RATE_LIMIT_PER_MIN || '6');
 const RATE_LIMIT_DAILY = parseInt(process.env.AI_RATE_LIMIT_DAILY || '200');

@@ -55,6 +55,52 @@ const formatTime = (dateString) => {
     return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 };
 
+const CodeBlock = ({ inline, className, children, ...props }) => {
+    const match = /language-(\w+)/.exec(className || '');
+    const [isCopied, setIsCopied] = useState(false);
+    const codeRef = useRef(null);
+
+    const handleCopy = async () => {
+        if (!codeRef.current) return;
+        
+        try {
+            await navigator.clipboard.writeText(codeRef.current.textContent);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch (err) {
+            console.error("Failed to copy text:", err);
+        }
+    };
+
+    return !inline && match ? (
+        <div className="relative group/code my-4 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                    {match[1]}
+                </span>
+                <button 
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                >
+                    <span className="material-symbols-outlined text-[12px]">
+                        {isCopied ? 'check' : 'content_copy'}
+                    </span>
+                    {isCopied ? 'Copied!' : 'Copy'}
+                </button>
+            </div>
+            <div className="bg-[#282c34] overflow-x-auto text-sm">
+                <code ref={codeRef} className={`${className} block p-4 font-mono text-white`} {...props}>
+                    {children}
+                </code>
+            </div>
+        </div>
+    ) : (
+        <code className={`${className} font-mono bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-[0.9em]`} {...props}>
+            {children}
+        </code>
+    );
+};
+
 const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate }) => { // [MODIFIED] Added onRegenerate
     const [showMenu, setShowMenu] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false); // [NEW] Feedback state
@@ -321,34 +367,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                         remarkPlugins={[remarkGfm, remarkMath]}
                                         rehypePlugins={[rehypeHighlight, rehypeKatex]}
                                         components={{
-                                            code({node, inline, className, children, ...props}) {
-                                                const match = /language-(\w+)/.exec(className || '');
-                                                return !inline && match ? (
-                                                    <div className="relative group/code my-4 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                                                            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
-                                                                {match[1]}
-                                                            </span>
-                                                            <button 
-                                                                onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ''))}
-                                                                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-[12px]">content_copy</span>
-                                                                Copy
-                                                            </button>
-                                                        </div>
-                                                        <div className="bg-[#282c34] overflow-x-auto text-sm">
-                                                            <code className={`${className} block p-4 font-mono text-white`} {...props}>
-                                                                {children}
-                                                            </code>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <code className={`${className} font-mono bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-[0.9em]`} {...props}>
-                                                        {children}
-                                                    </code>
-                                                )
-                                            }
+                                            code: CodeBlock
                                         }}
                                     >
                                         {/* [FIX] Pre-process API content: Replace literal <br> with newlines, and normalize math syntax */}
@@ -423,7 +442,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                         >
                             {isAi && onRegenerate && (
                                 <button 
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-2xl transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 first:rounded-t-2xl last:rounded-b-2xl transition-colors"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onRegenerate(msg.id);
@@ -438,7 +457,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             {isAi ? (
                                 <>
                                     <button 
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             navigator.clipboard.writeText(msg.content);
@@ -449,7 +468,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                         <span>Copy Text</span>
                                     </button>
                                     <button 
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             // Handle good feedback
@@ -462,7 +481,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                         <span>Good response</span>
                                     </button>
                                     <button 
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             // Handle bad feedback
@@ -476,8 +495,9 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     </button>
                                 </>
                             ) : (
+                                !onRegenerate && (
                                 <button 
-                                    className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${isAi ? '' : 'rounded-t-2xl'}`}
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const raw = msg.content || "";
@@ -497,12 +517,13 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     <span className="material-symbols-outlined text-base">reply</span>
                                     <span>Reply</span>
                                 </button>
+                                )
                             )}
 
                             {/* [NEW] Edit Option */}
                             {isMe && !isAudio && msg.type !== 'gif' && !msg.is_deleted_for_everyone && (
                                 <button 
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onEdit(msg);
@@ -516,7 +537,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
 
                             {isAudio && msg.status !== 'error' ? (
                                 <button 
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={handleDownload}
                                 >
                                     <span className="material-symbols-outlined text-base">download</span>
@@ -526,7 +547,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
 
                             {msg.type === 'gif' && (
                                 <button 
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         navigator.clipboard.writeText(msg.gif_url);
@@ -540,7 +561,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
 
                             {msg.type !== 'audio' && msg.type !== 'gif' && !isAi && (
                                 <button 
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         navigator.clipboard.writeText(msg.content);
@@ -554,7 +575,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             
                              {!isAi && (
                                 <button
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteForMe();
@@ -567,7 +588,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
 
                              {isAi && (
                                 <button
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-b-2xl transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteForMe();
@@ -580,7 +601,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
 
                             {msg.user_id === user.id && !isAi && (
                                 <button
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-b-2xl transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onDeleteForEveryone(msg);
