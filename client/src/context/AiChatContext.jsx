@@ -48,7 +48,7 @@ export function AiChatProvider({ children, socket }) {
 
     // Helper to get chat state safely
     const getChatState = useCallback((roomId) => {
-        return chats[roomId] || { messages: [], isAiThinking: false, currentAiOp: null };
+        return chats[roomId] || { messages: [], isAiThinking: false, currentAiOp: null, insertIndex: -1 };
     }, [chats]);
 
     // Register a room to ensure it exists in state
@@ -60,7 +60,8 @@ export function AiChatProvider({ children, socket }) {
                 [roomId]: {
                     messages: initialMessages,
                     isAiThinking: false,
-                    currentAiOp: null
+                    currentAiOp: null,
+                    insertIndex: -1
                 }
             };
         });
@@ -207,7 +208,8 @@ export function AiChatProvider({ children, socket }) {
                         ...chat,
                         messages: newMessages,
                         currentAiOp: null,
-                        isAiThinking: false
+                        isAiThinking: false,
+                        insertIndex: -1
                     }
                 };
             });
@@ -221,58 +223,65 @@ export function AiChatProvider({ children, socket }) {
 
                 const chat = prevChats[targetRoomId];
                 
-                // Avoid dupes
-                if (chat.messages.some(m => m.id === msg.id)) return prevChats;
-
-                let newMessages = [...chat.messages];
+                // Check if message already exists
+                const existingMessageIndex = chat.messages.findIndex(m => m.id === msg.id);
                 
-                // [FIX] Smart Merge: Check if we have a locally cancelled/finalized message with the same operationId
-                // The server message 'msg' should have 'meta' containing 'operationId'
+                let newMessages = [...chat.messages];
+
+                // [FIX] Extract msgOpId early for use in entire scope
                 let msgOpId = msg.meta?.operationId;
                 if (!msgOpId && typeof msg.meta === 'string') {
                     try { msgOpId = JSON.parse(msg.meta).operationId; } catch(e){}
                 }
 
-                if (msgOpId) {
-                    // Find if we have a message with valid meta.operationId == msgOpId
-                    const existingIdx = newMessages.findIndex(m => {
-                        let mOpId = m.meta?.operationId;
-                        if (!mOpId && typeof m.meta === 'string') {
-                            try { mOpId = JSON.parse(m.meta).operationId; } catch(e){}
-                        }
-                        return mOpId === msgOpId;
-                    });
+                if (existingMessageIndex !== -1) {
+                    // [FIX] Update existing message (Upsert)
+                    newMessages[existingMessageIndex] = msg;
+                } else {
+                    // [FIX] Smart Merge: Check if we have a locally cancelled/finalized message with the same operationId
 
-                    if (existingIdx !== -1) {
-                        // Found a match (likely our local placeholder)! Replace it.
-                        // We preserve the status if needed, but server message is usually 'sent' authoritative
-                        newMessages[existingIdx] = msg;
-                    } else {
-                        // Regular append logic
-                        // Check for tempId replacement
-                        if (msg.tempId) {
-                            const idx = newMessages.findIndex(m => m.id === msg.tempId);
-                            if (idx !== -1) {
-                                newMessages[idx] = { ...msg, replyTo: newMessages[idx].replyTo };
+                    if (msgOpId) {
+                        // Find if we have a message with valid meta.operationId == msgOpId
+                        const existingIdx = newMessages.findIndex(m => {
+                            let mOpId = m.meta?.operationId;
+                            if (!mOpId && typeof m.meta === 'string') {
+                                try { mOpId = JSON.parse(m.meta).operationId; } catch(e){}
+                            }
+                            return mOpId === msgOpId;
+                        });
+
+                        if (existingIdx !== -1) {
+                            // Found a match (likely our local placeholder)! Replace it.
+                            newMessages[existingIdx] = msg;
+                        } else if (chat.insertIndex > -1) {
+                            // [NEW] Insert at specific index for regeneration
+                            newMessages.splice(chat.insertIndex, 0, msg);
+                        } else {
+                            // Regular append logic
+                            if (msg.tempId) {
+                                const idx = newMessages.findIndex(m => m.id === msg.tempId);
+                                if (idx !== -1) {
+                                    newMessages[idx] = { ...msg, replyTo: newMessages[idx].replyTo };
+                                } else {
+                                    newMessages.push(msg);
+                                }
                             } else {
                                 newMessages.push(msg);
                             }
-                        } else {
-                            newMessages.push(msg);
                         }
-                    }
-                } else {
-                     // Fallback for messages without opId
-                     if (msg.tempId) {
-                         const idx = newMessages.findIndex(m => m.id === msg.tempId);
-                         if (idx !== -1) {
-                             newMessages[idx] = { ...msg, replyTo: newMessages[idx].replyTo };
+                    } else {
+                         // Fallback for messages without opId
+                         if (msg.tempId) {
+                             const idx = newMessages.findIndex(m => m.id === msg.tempId);
+                             if (idx !== -1) {
+                                 newMessages[idx] = { ...msg, replyTo: newMessages[idx].replyTo };
+                             } else {
+                                 newMessages.push(msg);
+                             }
                          } else {
                              newMessages.push(msg);
                          }
-                     } else {
-                         newMessages.push(msg);
-                     }
+                    }
                 }
                 
 
@@ -280,10 +289,12 @@ export function AiChatProvider({ children, socket }) {
                 // THIS logic is less critical now if handled by ai:done cancellation, but good for safety
                 let newCurrentAiOp = chat.currentAiOp;
                 let newIsAiThinking = chat.isAiThinking;
+                let newInsertIndex = chat.insertIndex;
 
                 if (chat.currentAiOp && chat.currentAiOp.id === msgOpId && !cancelledOpIds.current.has(msgOpId)) {
                     newCurrentAiOp = null;
                     newIsAiThinking = false;
+                    newInsertIndex = -1; // Reset insertion index
                 }
 
                 return {
@@ -292,7 +303,8 @@ export function AiChatProvider({ children, socket }) {
                         ...chat,
                         messages: newMessages,
                         currentAiOp: newCurrentAiOp,
-                        isAiThinking: newIsAiThinking
+                        isAiThinking: newIsAiThinking,
+                        insertIndex: newInsertIndex
                     }
                 };
             });
@@ -350,7 +362,8 @@ export function AiChatProvider({ children, socket }) {
             [roomId]: {
                 ...prev[roomId],
                 messages: [...(prev[roomId]?.messages || []), tempMsg],
-                isAiThinking: true
+                isAiThinking: true,
+                insertIndex: -1
             }
         }));
 
@@ -427,9 +440,12 @@ export function AiChatProvider({ children, socket }) {
                  ...prev,
                  [roomId]: {
                      ...prev[roomId],
-                     messages: [...prev[roomId].messages, finalizedMessage], // Append finalized message
+                     messages: chat.insertIndex > -1 
+                        ? [...prev[roomId].messages.slice(0, chat.insertIndex), finalizedMessage, ...prev[roomId].messages.slice(chat.insertIndex)]
+                        : [...prev[roomId].messages, finalizedMessage],
                      currentAiOp: null, // Clear streaming
-                     isAiThinking: false // Clear thinking
+                     isAiThinking: false, // Clear thinking
+                     insertIndex: -1
                  }
              };
         });
@@ -486,13 +502,14 @@ export function AiChatProvider({ children, socket }) {
         });
     };
 
-    const regenerate = async (roomId, prompt) => {
+    const regenerate = async (roomId, prompt, insertIndex = -1, regenerateId = null) => {
         // Find if we are already thinking?
         setChats(prev => ({
             ...prev,
             [roomId]: {
                 ...prev[roomId],
-                isAiThinking: true
+                isAiThinking: true,
+                insertIndex: insertIndex // [NEW] Set insertion index
             }
         }));
 
@@ -505,7 +522,8 @@ export function AiChatProvider({ children, socket }) {
                 },
                 body: JSON.stringify({
                     roomId: roomId,
-                    prompt: prompt
+                    prompt: prompt,
+                    regenerateId: regenerateId
                 })
             });
             
@@ -517,7 +535,9 @@ export function AiChatProvider({ children, socket }) {
                 ...prev,
                 [roomId]: {
                      ...prev[roomId],
-                     isAiThinking: false
+                     ...prev[roomId],
+                     isAiThinking: false,
+                     insertIndex: -1
                 }
             }));
         }

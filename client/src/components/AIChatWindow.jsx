@@ -53,7 +53,8 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
     const [showMenu, setShowMenu] = useState(false);
     
     // Derived state from context
-    const { messages, isAiThinking, currentAiOp } = getChatState(room.id);
+    // Derived state from context
+    const { messages, isAiThinking, currentAiOp, insertIndex } = getChatState(room.id);
 
     // We don't need typing users or privileged modals for AI chat
     const [replyTo, setReplyTo] = useState(null); 
@@ -159,15 +160,17 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
         // For now, let's invoke the API directly here but use context setters?
         // Or better, add `regenerateQuery` to context? 
         // Let's stick to local logic for regeneration using `sendQuery` but avoiding the user msg?
-        regenerate(room.id, prompt);
+        regenerate(room.id, prompt, aiMsgIndex, aiMessageId);
     };
 
     // Helper to construct messages with skeleton/partial
     // derived messages already has state, but we need to append currentAiOp if streaming
     
     const displayedMessages = [...messages];
+    let streamingMsg = null;
+
     if (currentAiOp) {
-        displayedMessages.push({
+        streamingMsg = {
             id: 'streaming-ai',
             room_id: room.id,
             user_id: 'ai-assistant', 
@@ -178,9 +181,9 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
             type: 'text',
             avatar_thumb_url: null, 
             isStreaming: currentAiOp.isStreaming !== false 
-        });
+        };
     } else if (isAiThinking) {
-        displayedMessages.push({
+        streamingMsg = {
             id: 'thinking-ai',
             room_id: room.id,
             user_id: 'ai-assistant', 
@@ -191,7 +194,15 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
             type: 'text',
             avatar_thumb_url: null, 
             isSkeleton: true
-        });
+        };
+    }
+
+    if (streamingMsg) {
+        if (insertIndex !== undefined && insertIndex > -1) {
+            displayedMessages.splice(insertIndex, 0, streamingMsg);
+        } else {
+            displayedMessages.push(streamingMsg);
+        }
     }
 
     // Valid wrapper for MessageList to update context messages (optimistic updates)

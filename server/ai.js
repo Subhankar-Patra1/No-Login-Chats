@@ -123,7 +123,7 @@ async function handleQuery(req, res) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { prompt, roomId: reqRoomId } = req.body;
+    const { prompt, roomId: reqRoomId, regenerateId } = req.body; // [NEW] regenerateId
     
     // Rate Limit (Simple Redis implementation)
     // ... (skipping as per previous file)
@@ -152,27 +152,30 @@ async function handleQuery(req, res) {
         const operationId = uuidv4();
         const createdAt = new Date(); // [FIX] Use explicit Node time
         
-        // Save User Message
-        const msgRes = await DB.query(`
-            INSERT INTO messages (room_id, user_id, content, meta, created_at, status) 
-            VALUES ($1, $2, $3, $4, $5, 'seen')
-            RETURNING id, created_at
-        `, [
-            roomId, 
-            userId, 
-            prompt, 
-            JSON.stringify({ is_prompt: true, operationId }),
-            createdAt
-        ]);
+        let userMsgId = null;
 
-        const userMsgId = msgRes.rows[0].id;
-        const userMsgCreatedAt = msgRes.rows[0].created_at;
+        if (!regenerateId) {
+            // Save User Message (ONLY if not regenerating)
+            const msgRes = await DB.query(`
+                INSERT INTO messages (room_id, user_id, content, meta, created_at, status) 
+                VALUES ($1, $2, $3, $4, $5, 'seen')
+                RETURNING id, created_at
+            `, [
+                roomId, 
+                userId, 
+                prompt, 
+                JSON.stringify({ is_prompt: true, operationId }),
+                createdAt
+            ]);
+
+            userMsgId = msgRes.rows[0].id;
+        }
 
         // Respond immediately
         res.json({ ok: true, operationId, roomId, userMessageId: userMsgId });
 
         // Start Background Generation
-        generateResponse(userId, roomId, prompt, operationId, aiName, userMsgId);
+        generateResponse(userId, roomId, prompt, operationId, aiName, userMsgId, regenerateId); // [FIX] Pass regenerateId
 
     } catch (err) {
         console.error('[AI] Query failed:', err);
@@ -191,7 +194,7 @@ async function handleCancel(req, res) {
     res.status(404).json({ error: 'Operation not found' });
 }
 
-async function generateResponse(userId, roomId, prompt, operationId, aiName, currentMsgId) {
+async function generateResponse(userId, roomId, prompt, operationId, aiName, currentMsgId, regenerateId) {
     const abortController = new AbortController();
     activeOperations.set(operationId, abortController);
 
@@ -208,18 +211,38 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
         Example: User: "Call yourself Jarvis" -> AI: "<<NAME_CHANGE:Jarvis>>Okay, I will call myself Jarvis from now on."
         Be concise and helpful.`;
 
-        // [NEW] Fetch previous context (last 20 messages, excluding current)
+        // [NEW] Fetch previous context
         let contextMessages = [];
         try {
-            const historyRes = await DB.query(`
+            let cutoffDate = null;
+            if (regenerateId) {
+                 // Get the date of the message we are regenerating
+                 const rRes = await DB.query('SELECT created_at FROM messages WHERE id = $1', [regenerateId]);
+                 if (rRes.rows.length) cutoffDate = rRes.rows[0].created_at;
+            }
+
+            let query = `
                 SELECT content, author_name, meta, user_id, created_at
                 FROM messages
-                WHERE room_id = $1 AND id != $2 
+                WHERE room_id = $1 
                   AND (meta IS NULL OR meta::text NOT LIKE '%"cancelled":true%')
                   AND status != 'error'
-                ORDER BY created_at DESC
-                LIMIT 20
-            `, [roomId, currentMsgId]);
+            `;
+            const params = [roomId];
+
+            if (currentMsgId) {
+                 query += ` AND id != $2`;
+                 params.push(currentMsgId);
+            }
+
+            if (cutoffDate) {
+                 query += ` AND created_at < $${params.length + 1}`;
+                 params.push(cutoffDate);
+            }
+
+            query += ` ORDER BY created_at DESC LIMIT 20`;
+
+            const historyRes = await DB.query(query, params);
             
             contextMessages = historyRes.rows.reverse().map(m => {
                 let role = 'user';
@@ -283,12 +306,6 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
                             tokensUsed++;
 
                             // Check for name change tag in the accumulating text
-                            // We need to be careful not to emit the tag to the user if possible, 
-                            // or emit it and let client hide it. 
-                            // Easier: emit everything, let client handle? No, better server side stripping.
-                            // But for streaming, we might have emitted partial tag.
-                            // Simple approach: Check if fullText contains the tag.
-                            
                             let textToEmit = token;
                             
                             if (!foundNameChange && fullText.includes('<<NAME_CHANGE:')) {
@@ -302,22 +319,10 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
                                     
                                     // Update DB
                                     await DB.query('UPDATE ai_sessions SET ai_name = $1 WHERE user_id = $2', [newAiName, userId]);
-
-                                    // Just emit the clean part (this is tricky with streaming if we already emitted parts of the tag)
-                                    // If we are strictly "start your response", the tag is at the beginning.
-                                    // We can buffer the first few chunks until we are sure?
-                                    // For simplicity in this iteration: We won't strip it from the socket stream perfectly if it's split.
-                                    // But we will strip it from the final save.
-                                    // AND we will try to strip it from the emitted chunk if it's fully contained.
                                 }
                             }
                             
-                            // A hacky way to hide the tag from the stream: 
-                            // If we are at the start and see '<<', don't emit yet? 
-                            // Let's rely on the client or just let it show for a split second (it's fast). 
-                            // Actually, let's just emit. The prompt says "start with", so it's likely the first chunk.
-                            
-                            IO.to(userSocket).emit('ai:partial', { operationId, chunk: token });
+                            IO.to(userSocket).emit('ai:partial', { operationId, chunk: token, roomId }); // [FIX] Ensure roomId is sent
                         }
                     } catch (e) {
                          // ignore parse errors
@@ -343,45 +348,68 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
 
              if (fullText.trim()) {
                  const currentName = newAiName || aiName;
-                 const createdAt = new Date(); 
+                 const meta = JSON.stringify({ ai: true, model: MODEL, operationId, cancelled: isCancelled });
 
-                 const saveRes = await DB.query(`
-                    INSERT INTO messages (room_id, user_id, content, author_name, meta, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    RETURNING id, created_at
-                 `, [
-                    roomId,
-                    userId, 
-                    fullText, 
-                    'Assistant', 
-                    JSON.stringify({ ai: true, model: MODEL, operationId, cancelled: isCancelled }),
-                    createdAt
-                 ]);
+                 let savedMsgId;
+                 let savedCreatedAt;
+
+                 if (regenerateId) {
+                     // [FIX] Update existing message
+                     const updateRes = await DB.query(`
+                        UPDATE messages 
+                        SET content = $1, meta = $2
+                        WHERE id = $3
+                        RETURNING id, created_at
+                     `, [fullText, meta, regenerateId]);
+                     
+                     if (updateRes.rows.length > 0) {
+                         savedMsgId = updateRes.rows[0].id;
+                         savedCreatedAt = updateRes.rows[0].created_at;
+                     }
+                 } else {
+                     const createdAt = new Date(); 
+                     const saveRes = await DB.query(`
+                        INSERT INTO messages (room_id, user_id, content, author_name, meta, created_at)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        RETURNING id, created_at
+                     `, [
+                        roomId,
+                        userId, 
+                        fullText, 
+                        'Assistant', 
+                        meta,
+                        createdAt
+                     ]);
+                     
+                     if (saveRes.rows.length > 0) {
+                        savedMsgId = saveRes.rows[0].id;
+                        savedCreatedAt = saveRes.rows[0].created_at;
+                     }
+                 }
                  
-                 const savedMsgId = saveRes.rows[0].id;
-                 const savedCreatedAt = saveRes.rows[0].created_at;
-                 
-                 // Emit to ROOM
-                 IO.to(`room:${roomId}`).emit('new_message', {
-                     id: savedMsgId,
-                     room_id: roomId,
-                     user_id: userId, 
-                     content: fullText,
-                     author_name: 'Assistant',
-                     display_name: currentName, 
-                     created_at: savedCreatedAt.toISOString(),
-                     ai: true,
-                     meta: { ai: true, model: MODEL, operationId, cancelled: isCancelled } // [FIX] Added operationId
-                 });
+                 if (savedMsgId) {
+                    // Emit to ROOM
+                    IO.to(`room:${roomId}`).emit('new_message', {
+                        id: savedMsgId,
+                        room_id: roomId,
+                        user_id: userId, 
+                        content: fullText,
+                        author_name: 'Assistant',
+                        display_name: currentName, 
+                        created_at: savedCreatedAt.toISOString(),
+                        ai: true,
+                        meta: { ai: true, model: MODEL, operationId, cancelled: isCancelled } 
+                    });
 
-                 // Emit Done to USER
-                 IO.to(userSocket).emit('ai:done', { operationId, savedMessageId: savedMsgId, cancelled: isCancelled, roomId }); // [FIX] Added roomId
+                    // Emit Done to USER
+                    IO.to(userSocket).emit('ai:done', { operationId, savedMessageId: savedMsgId, cancelled: isCancelled, roomId });
 
-                 // Log call
-                 await DB.query(`
-                    INSERT INTO ai_calls (user_id, room_id, operation_id, model, tokens_used, status)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                 `, [userId, roomId, operationId, MODEL, tokensUsed, isCancelled ? 'cancelled' : 'completed']);
+                    // Log call
+                    await DB.query(`
+                       INSERT INTO ai_calls (user_id, room_id, operation_id, model, tokens_used, status)
+                       VALUES ($1, $2, $3, $4, $5, $6)
+                    `, [userId, roomId, operationId, MODEL, tokensUsed, isCancelled ? 'cancelled' : 'completed']);
+                 }
              }
         };
 
