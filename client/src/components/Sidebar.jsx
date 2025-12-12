@@ -5,6 +5,7 @@ import StatusDot from './StatusDot';
 import ProfileShareModal from './ProfileShareModal';
 import ProfilePanel from './ProfilePanel';
 import { linkifyText } from '../utils/linkify';
+import SparkleLogo from './icons/SparkleLogo';
 
 
 export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, onCreateRoom, onJoinRoom, user, onLogout }) {
@@ -14,7 +15,6 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
     const [showShareProfile, setShowShareProfile] = useState(false);
     const [showMyProfile, setShowMyProfile] = useState(false);
     const myProfileRef = useRef(null);
-
 
     const filteredRooms = rooms.filter(r => r.type === tab);
     
@@ -28,6 +28,27 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
             fetchStatuses(userIds);
         }
     }, [rooms]);
+
+    // [NEW] Auto-init AI session when switching to AI tab
+    useEffect(() => {
+        if (tab === 'ai') {
+            const initAi = async () => {
+                const existing = rooms.find(r => r.type === 'ai');
+                if (existing) return;
+
+                try {
+                    const token = localStorage.getItem('token');
+                    await fetch(`${import.meta.env.VITE_API_URL}/api/ai/session`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    // Dashboard socket 'room_added' handles the rest
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+            initAi();
+        }
+    }, [tab, rooms]);
 
     return (
         <div className="w-full h-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl transition-colors">
@@ -67,6 +88,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                     </button>
                 </div>
                 <div className="flex items-center gap-2">
+
                     <button 
                         onClick={(e) => toggleTheme(e)} 
                         className="p-2 rounded-full text-slate-400 dark:text-slate-400 hover:text-amber-500 dark:hover:text-yellow-400 transition-all duration-200"
@@ -86,7 +108,6 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                 </div>
             </div>
 
-            {/* Tabs */}
             <div className="p-4 pb-2">
                 <div className="flex p-1 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800/50 transition-colors">
                     <button 
@@ -101,10 +122,21 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                     >
                         Direct
                         {rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0) > 0 && (
-                            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full px-1 border-2 border-white dark:border-slate-900">
+                            <span className="absolute -top-1 -right-0 min-w-[18px] h-[18px] bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full px-1 border-2 border-white dark:border-slate-900">
                                 {rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0) > 99 ? '99+' : rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0)}
                             </span>
                         )}
+                    </button>
+                    <button 
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center ${tab === 'ai' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                        onClick={() => setTab('ai')}
+                    >
+                        <div className="relative inline-flex items-center">
+                            AI
+                            <div className="absolute -top-1.5 -right-2.5">
+                                <SparkleLogo className={`w-3.5 h-3.5 ${tab === 'ai' ? 'opacity-100' : 'opacity-70 grayscale hover:grayscale-0 transition-all'}`} />
+                            </div>
+                        </div>
                     </button>
                 </div>
             </div>
@@ -113,7 +145,15 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
             <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
                 {filteredRooms.length === 0 && (
                     <div className="text-center py-8 text-slate-500 text-sm">
-                        No {tab} chats yet.
+                        {tab === 'ai' ? (
+                            <div className="flex flex-col items-center gap-2">
+                                <span className="material-symbols-outlined text-3xl text-slate-300">smart_toy</span>
+                                <span>No AI chats yet.</span>
+                                <span className="text-xs text-slate-400">Initializing...</span>
+                            </div>
+                        ) : (
+                            `No ${tab} chats yet.`
+                        )}
                     </div>
                 )}
                 {filteredRooms.map(room => (
@@ -127,13 +167,15 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
                         }`}
                     >
-                        <div className={`w-10 h-10 flex items-center justify-center ${room.type === 'direct' ? 'rounded-full' : 'rounded-lg p-2'} ${activeRoom?.id === room.id ? 'bg-violet-200 dark:bg-violet-500/20' : 'bg-slate-200 dark:bg-slate-800 group-hover:bg-slate-300 dark:group-hover:bg-slate-700'} transition-colors relative`}>
+                        <div className={`w-10 h-10 flex items-center justify-center ${room.type === 'direct' || room.type === 'ai' ? 'rounded-full' : 'rounded-lg p-2'} ${activeRoom?.id === room.id ? 'bg-violet-200 dark:bg-violet-500/20' : 'bg-slate-200 dark:bg-slate-800 group-hover:bg-slate-300 dark:group-hover:bg-slate-700'} transition-colors relative`}>
                             {room.avatar_thumb_url ? (
                                 <img src={room.avatar_thumb_url} alt={room.name} className={`w-full h-full object-cover ${room.type === 'direct' ? 'rounded-full' : 'rounded-lg'}`} />
                             ) : room.type === 'direct' ? (
                                 <span className="text-sm font-bold">
                                     {room.name[0].toUpperCase()}
                                 </span>
+                            ) : room.type === 'ai' ? (
+                                <SparkleLogo className="w-6 h-6" />
                             ) : (
                                 <span className="material-symbols-outlined text-lg">
                                     group
@@ -145,7 +187,9 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                         </div>
                         <div className="flex-1 min-w-0 flex justify-between items-center">
                             <div>
-                                <span className="truncate font-medium block">{linkifyText(room.name)}</span>
+                                <span className="truncate font-medium block">
+                                    {room.type === 'ai' ? 'Sparkle AI' : linkifyText(room.name)}
+                                </span>
                                 {room.type === 'group' && (
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
                                 )}
@@ -168,20 +212,28 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
 
             {/* Actions */}
             <div className="p-4 border-t border-slate-200/50 dark:border-slate-800/50 bg-white/30 dark:bg-slate-900/30 space-y-3 transition-colors duration-300">
-                <button 
-                    onClick={onCreateRoom}
-                    className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all duration-200 transform hover:scale-[1.02]"
-                >
-                    <span className="material-symbols-outlined text-lg">add_circle</span>
-                    New Room
-                </button>
-                <button 
-                    onClick={onJoinRoom}
-                    className="w-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 transition-all duration-200 transform hover:scale-[1.02]"
-                >
-                    <span className="material-symbols-outlined text-lg">login</span>
-                    Join Room
-                </button>
+                {tab === 'ai' ? (
+                   <div className="text-center text-xs text-slate-400">
+                       AI Assistant is ready
+                   </div>
+                ) : (
+                    <>
+                        <button 
+                            onClick={onCreateRoom}
+                            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all duration-200 transform hover:scale-[1.02]"
+                        >
+                            <span className="material-symbols-outlined text-lg">add_circle</span>
+                            New Room
+                        </button>
+                        <button 
+                            onClick={onJoinRoom}
+                            className="w-full bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 transition-all duration-200 transform hover:scale-[1.02]"
+                        >
+                            <span className="material-symbols-outlined text-lg">login</span>
+                            Join Room
+                        </button>
+                    </>
+                )}
             </div>
 
             

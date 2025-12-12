@@ -85,7 +85,7 @@ const PrivilegedUsersModal = ({ isOpen, onClose, title, roomId, roleFilter, toke
     );
 };
 
-export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo }) {
+export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo, isLoading }) {
     const { token } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
     const [showProfileCard, setShowProfileCard] = useState(false);
@@ -95,6 +95,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const [replyTo, setReplyTo] = useState(null); 
     const [editingMessage, setEditingMessage] = useState(null);
     const [typingUsers, setTypingUsers] = useState([]);
+
     const typingTimeoutsRef = useRef({});
 
     const headerRef = useRef(null);
@@ -168,6 +169,11 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         const handleNewMessage = (msg) => {
             console.log('Received new_message:', msg, 'Current room:', room.id);
             if (String(msg.room_id) === String(room.id)) {
+                // [NEW] Emit delivered
+                if (msg.user_id !== user.id) {
+                    socket.emit('message_delivered', { messageId: msg.id, roomId: room.id });
+                }
+
                 setTypingUsers(prev => prev.filter(u => u.userId !== msg.user_id));
                 if (typingTimeoutsRef.current[msg.user_id]) {
                     clearTimeout(typingTimeoutsRef.current[msg.user_id]);
@@ -299,6 +305,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             }
         });
 
+
+
         return () => {
             socket.off('new_message', handleNewMessage);
             socket.off('messages_status_update', handleStatusUpdate);
@@ -306,6 +314,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             socket.off('message_edited', handleMessageEdited);
             socket.off('typing:start', handleTypingStart);
             socket.off('typing:stop', handleTypingStop);
+
             
             Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
         };
@@ -315,8 +324,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         setMessages(prev => prev.filter(m => m.id !== messageId));
     };
 
-    const handleSend = (content, replyToMsg) => {
-        if (socket && !isExpired) {
+    const handleSend = async (content, replyToMsg) => {
+        if (!isExpired) {
             const tempId = `temp-${Date.now()}`;
             const tempMsg = {
                 id: tempId,
@@ -330,6 +339,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 status: 'sending'
             };
             setMessages(prev => [...prev, tempMsg]);
+            setReplyTo(null);
             
             socket.emit('send_message', { 
                 roomId: room.id, 
@@ -337,9 +347,10 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 replyToMessageId: replyToMsg ? replyToMsg.id : null,
                 tempId 
             });
-            setReplyTo(null);
         }
     };
+
+
 
     const uploadAudioWithProgress = async (formData, tempId) => {
         return new Promise((resolve, reject) => {
@@ -534,6 +545,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 relative overflow-hidden transition-colors">
+            {/* ... (Modal and Background remain same, but easier to just wrap MessageList) */}
             <PrivilegedUsersModal 
                 isOpen={showPrivilegedModal} 
                 onClose={() => setShowPrivilegedModal(false)}
@@ -624,17 +636,26 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 )}
             </div>
 
-            <MessageList 
-                messages={messages} 
-                setMessages={setMessages} 
-                currentUser={user} 
-                roomId={room.id} 
-                socket={socket} 
-                onReply={setReplyTo} 
-                onDelete={handleLocalDelete}
-                onRetry={handleRetryAudio} 
-                onEdit={setEditingMessage}
-            />
+            {isLoading ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 z-10">
+                     <span className="material-symbols-outlined text-4xl animate-spin text-violet-500">progress_activity</span>
+                     <p className="text-slate-500 dark:text-slate-400 font-medium animate-pulse">Loading your messages...</p>
+                </div>
+            ) : (
+                <MessageList 
+                    messages={messages} 
+                    setMessages={setMessages} 
+                    currentUser={user} 
+                    roomId={room.id} 
+                    socket={socket} 
+                    onReply={setReplyTo} 
+                    onDelete={handleLocalDelete}
+                    onRetry={handleRetryAudio} 
+                    onEdit={setEditingMessage}
+                />
+            )}
+            
+
             
             {/* Typing Indicator */}
             {typingUsers.length > 0 && (

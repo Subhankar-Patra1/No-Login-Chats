@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { linkifyText } from '../utils/linkify';
 import { useAuth } from '../context/AuthContext';
 import AudioPlayer from './AudioPlayer';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math'; // [NEW]
+import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex'; // [NEW]
+import 'highlight.js/styles/atom-one-dark.css';
+import 'katex/dist/katex.min.css'; // [NEW]
+import SparkleLogo from './icons/SparkleLogo';
 
 const formatDuration = (ms) => {
     if (!ms) return '0:00';
@@ -11,8 +19,45 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad }) => { // [MODIFIED] Added onImageLoad
+const formatTime = (dateString) => {
+    if (!dateString) return '';
+    
+    let date;
+    
+    // Handle Date objects directly
+    if (dateString instanceof Date) {
+        date = dateString;
+    } else {
+        let s = String(dateString);
+        
+        // Normalize: "2023-01-01 12:00:00" -> "2023-01-01T12:00:00"
+        if (s.includes(' ') && !s.includes('T')) {
+            s = s.replace(' ', 'T');
+        }
+        
+        // Truncate milliseconds to 3 digits (e.g. .123456 -> .123) to avoid JS parsing issues
+        s = s.replace(/(\.\d{3})\d+/, '$1');
+
+        // Heuristic: If valid ISO-like string but missing Z and offset, treat as UTC
+        // Check for Z or +HH:mm or -HH:mm at the end
+        // Simple check: if it ends in a digit, it's likely missing timezone info
+        const hasTimezone = /[Zz]|[+\-]\d{2}(:?\d{2})?$/.test(s);
+        
+        if (!hasTimezone) {
+             s += 'Z'; // Assume UTC for server timestamps
+        }
+
+        date = new Date(s);
+    }
+    
+    if (isNaN(date.getTime())) return '';
+
+    return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+};
+
+const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate }) => { // [MODIFIED] Added onRegenerate
     const [showMenu, setShowMenu] = useState(false);
+    const [showFeedback, setShowFeedback] = useState(false); // [NEW] Feedback state
     const menuRef = useRef(null);
     const { token, user } = useAuth(); 
     const isAudio = msg.type === 'audio';
@@ -107,37 +152,66 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
         );
     }
 
+    const isAi = msg.user_id === 'ai-assistant' || msg.author_name === 'Assistant' || (msg.meta && msg.meta.ai) || msg.isStreaming;
+
     return (
+
         <div 
             id={`msg-${msg.id}`}
             className={`flex ${isMe ? 'justify-end' : 'justify-start'} group max-w-full animate-slide-in-up ${showMenu ? 'z-[100] relative' : ''}`}
         >
             <div className={`max-w-[75%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                {/* ... (Avatar logic remains same) ... */}
+                {/* Feedback Popup */}
+                {showFeedback && (
+                    <div className="absolute top-full mt-2 left-0 z-50 animate-in fade-in slide-in-from-top-1 duration-300 pointer-events-none">
+                        <div className="bg-slate-800/90 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 border border-slate-700/50">
+                            <span className="material-symbols-outlined text-[14px] text-green-400">check_circle</span>
+                            Response sent
+                        </div>
+                    </div>
+                )}
+                
                 {!isMe && (
                     <div className="flex items-center gap-2 mb-1 ml-1 select-none">
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold overflow-hidden ${!msg.avatar_thumb_url ? 'bg-gradient-to-br from-indigo-500 to-violet-600' : 'bg-slate-200 dark:bg-slate-800'}`}>
-                            {msg.avatar_thumb_url ? (
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold overflow-hidden ${isAi ? 'bg-fuchsia-50 dark:bg-fuchsia-900/10 border border-fuchsia-100 dark:border-fuchsia-800/30' : (!msg.avatar_thumb_url ? 'bg-gradient-to-br from-indigo-500 to-violet-600' : 'bg-slate-200 dark:bg-slate-800')}`}>
+                            {isAi ? (
+                                <SparkleLogo className="w-3.5 h-3.5" />
+                            ) : msg.avatar_thumb_url ? (
                                 <img src={msg.avatar_thumb_url} alt={msg.display_name} className="w-full h-full object-cover" />
                             ) : (
                                 (msg.display_name || msg.username || '?')[0].toUpperCase()
                             )}
                         </div>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium transition-colors">
-                            {msg.display_name || msg.username}
+
+                        <span className={`text-xs font-medium transition-colors ${isAi ? 'text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 to-purple-600 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {isAi ? (msg.display_name && msg.display_name !== 'Assistant' ? msg.display_name : 'Sparkle AI') : (msg.display_name || msg.username)}
                         </span>
                     </div>
                 )}
+
                 
                 <div className="relative group">
                     <div className={`
-                        px-4 py-3 shadow-md text-sm leading-relaxed break-all relative overflow-hidden whitespace-pre-wrap
+                        px-4 py-3 shadow-md text-sm leading-relaxed break-all relative overflow-hidden
                         ${isMe 
-                            ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm' 
-                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm border border-slate-100 dark:border-slate-700'
+                            ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm whitespace-pre-wrap' 
+                            : isAi 
+                                ? 'bg-white dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-2xl rounded-tl-sm border border-purple-200/50 dark:border-purple-500/30 shadow-purple-500/5 min-w-[200px]' 
+                                : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm border border-slate-100 dark:border-slate-700 whitespace-pre-wrap'
                         }
                     `}>
-                        {msg.replyTo && (
-                            <div 
+                        {msg.isSkeleton ? (
+                            <div className="flex gap-1 py-1">
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 animate-[bounce_1.4s_infinite_0ms]"></span>
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 animate-[bounce_1.4s_infinite_200ms]"></span>
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 animate-[bounce_1.4s_infinite_400ms]"></span>
+                            </div>
+                        ) : (
+                            <>
+                                {msg.replyTo && (
+                             // ... (reply rendering same)
+                             <div 
                                 onClick={() => scrollToMessage(msg.replyTo.id)} 
                                 className={`
                                     mb-1 p-2 rounded-lg cursor-pointer
@@ -169,7 +243,8 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                         )}
 
                         {isAudio ? (
-                            <div className="pr-6 pt-1 pb-1 min-w-[200px]">
+                            // ... (Audio rendering logic same)
+                             <div className="pr-6 pt-1 pb-1 min-w-[200px]">
                                 {msg.uploadStatus === 'uploading' ? (
                                     <div className="flex items-center gap-3 py-1">
                                          <div className="w-8 h-8 rounded-full bg-slate-100/10 flex items-center justify-center">
@@ -204,6 +279,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 )}
                             </div>
                         ) : msg.type === 'gif' ? (
+                            // ... (GIF rendering same)
                             <>
                             <div className="relative group/gif mt-1 mb-1 max-w-[200px] sm:max-w-[300px]">
                                 {msg.gif_url && msg.gif_url.endsWith('.mp4') ? (
@@ -239,12 +315,64 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             )}
                             </>
                         ) : (
-                            <p className="pr-10">
-                                {linkifyText(msg.content)}
-                                {msg.edited_at && (
-                                    <span className="text-[10px] opacity-60 ml-1">(edited)</span>
+                            <div className={`pr-2 ${!isMe && isAi ? 'markdown-content' : 'pr-6'}`}>
+                                {isAi && !isMe ? (
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm, remarkMath]}
+                                        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+                                        components={{
+                                            code({node, inline, className, children, ...props}) {
+                                                const match = /language-(\w+)/.exec(className || '');
+                                                return !inline && match ? (
+                                                    <div className="relative group/code my-4 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                                                        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                                                            <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
+                                                                {match[1]}
+                                                            </span>
+                                                            <button 
+                                                                onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ''))}
+                                                                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[12px]">content_copy</span>
+                                                                Copy
+                                                            </button>
+                                                        </div>
+                                                        <div className="bg-[#282c34] overflow-x-auto text-sm">
+                                                            <code className={`${className} block p-4 font-mono text-white`} {...props}>
+                                                                {children}
+                                                            </code>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <code className={`${className} font-mono bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-[0.9em]`} {...props}>
+                                                        {children}
+                                                    </code>
+                                                )
+                                            }
+                                        }}
+                                    >
+                                        {/* [FIX] Pre-process API content: Replace literal <br> with newlines, and normalize math syntax */}
+                                        {msg.content
+                                            .replace(/<br\s*\/?>/gi, '\n')
+                                            .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$') // \[...\] -> $$...$$
+                                            .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$')     // \(...\) -> $...$
+                                        }
+                                    </ReactMarkdown>
+                                ) : (
+                                     <>
+                                        {linkifyText(msg.content)}
+                                        {msg.edited_at && (
+                                            <span className="text-[10px] opacity-60 ml-1">(edited)</span>
+                                        )}
+                                     </>
                                 )}
-                            </p>
+                    
+                                {msg.isStreaming && (
+                                    <span className="inline-block w-1.5 h-4 bg-fuchsia-500 ml-0.5 align-middle animate-pulse rounded-full" />
+                                )}
+                            </div>
+                        )}
+                        </>
                         )}
                         
                         {isMe && (
@@ -252,7 +380,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 {msg.status === 'sending' && <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>}
                                 {msg.status === 'error' && <span className="material-symbols-outlined text-[14px] text-red-300">error</span>}
                                 {msg.status === 'sent' && <span className="material-symbols-outlined text-[14px]">check</span>}
-                                {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px]">check_circle</span>}
+                                {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px]">done_all</span>}
                                 {msg.status === 'seen' && <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>}
                             </div>
                         )}
@@ -263,18 +391,20 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                     ${isMe ? 'right-full mr-2' : 'left-full ml-2'}
                     z-10
                 `}>
-                    <button
-                        type="button"
-                        className={`
-                            opacity-0 group-hover:opacity-100
-                            transition-opacity duration-150
-                            text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white
-                            p-1 rounded-full
-                        `}
-                        onClick={toggleMenu}
-                    >
-                        ⋯
-                    </button>
+                    {(isMe || (isAi && !msg.isStreaming && !msg.isSkeleton)) && ( // [FIX] Hide menu if streaming OR skeleton loading
+                        <button
+                            type="button"
+                            className={`
+                                opacity-0 group-hover:opacity-100
+                                transition-opacity duration-150
+                                text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white
+                                p-1 rounded-full
+                            `}
+                            onClick={toggleMenu}
+                        >
+                            ⋯
+                        </button>
+                    )}
 
                     {showMenu && (
                         <div
@@ -291,27 +421,83 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 z-[9999]
                             `}
                         >
-                            <button 
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-2xl transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    const raw = msg.content || "";
-                                    const normalized = raw.replace(/\s+/g, " ").trim();
-                                    const maxLen = 120;
-                                    const snippet = normalized.length > maxLen ? normalized.slice(0, maxLen) + "…" : normalized;
-                                    onReply({
-                                        id: msg.id,
-                                        sender: msg.display_name || msg.username,
-                                        text: snippet,
-                                        type: msg.type,
-                                        audio_duration_ms: msg.audio_duration_ms
-                                    });
-                                    setShowMenu(false);
-                                }}
-                            >
-                                <span className="material-symbols-outlined text-base">reply</span>
-                                <span>Reply</span>
-                            </button>
+                            {isAi && onRegenerate && (
+                                <button 
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-2xl transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRegenerate(msg.id);
+                                        setShowMenu(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">refresh</span>
+                                    <span>Regenerate Response</span>
+                                </button>
+                            )}
+
+                            {isAi ? (
+                                <>
+                                    <button 
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigator.clipboard.writeText(msg.content);
+                                            setShowMenu(false);
+                                        }}
+                                    >
+                                        <span className="material-symbols-outlined text-base">content_copy</span>
+                                        <span>Copy Text</span>
+                                    </button>
+                                    <button 
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Handle good feedback
+                                            setShowMenu(false);
+                                            setShowFeedback(true);
+                                            setTimeout(() => setShowFeedback(false), 2000);
+                                        }}
+                                    >
+                                        <span className="material-symbols-outlined text-base">thumb_up</span>
+                                        <span>Good response</span>
+                                    </button>
+                                    <button 
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Handle bad feedback
+                                            setShowMenu(false);
+                                            setShowFeedback(true);
+                                            setTimeout(() => setShowFeedback(false), 2000);
+                                        }}
+                                    >
+                                        <span className="material-symbols-outlined text-base">thumb_down</span>
+                                        <span>Bad response</span>
+                                    </button>
+                                </>
+                            ) : (
+                                <button 
+                                    className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${isAi ? '' : 'rounded-t-2xl'}`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const raw = msg.content || "";
+                                        const normalized = raw.replace(/\s+/g, " ").trim();
+                                        const maxLen = 120;
+                                        const snippet = normalized.length > maxLen ? normalized.slice(0, maxLen) + "…" : normalized;
+                                        onReply({
+                                            id: msg.id,
+                                            sender: msg.display_name || msg.username,
+                                            text: snippet,
+                                            type: msg.type,
+                                            audio_duration_ms: msg.audio_duration_ms
+                                        });
+                                        setShowMenu(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">reply</span>
+                                    <span>Reply</span>
+                                </button>
+                            )}
 
                             {/* [NEW] Edit Option */}
                             {isMe && !isAudio && msg.type !== 'gif' && !msg.is_deleted_for_everyone && (
@@ -352,7 +538,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 </button>
                             )}
 
-                            {msg.type !== 'audio' && msg.type !== 'gif' && (
+                            {msg.type !== 'audio' && msg.type !== 'gif' && !isAi && (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                     onClick={(e) => {
@@ -366,18 +552,33 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 </button>
                             )}
                             
-                             <button
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteForMe();
-                                }}
-                            >
-                                <span className="material-symbols-outlined text-base">delete</span>
-                                <span>Delete for me</span>
-                            </button>
+                             {!isAi && (
+                                <button
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteForMe();
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">delete</span>
+                                    <span>Delete for me</span>
+                                </button>
+                             )}
 
-                            {msg.user_id === user.id && (
+                             {isAi && (
+                                <button
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-b-2xl transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteForMe();
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">delete</span>
+                                    <span>Delete</span>
+                                </button>
+                             )}
+
+                            {msg.user_id === user.id && !isAi && (
                                 <button
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-b-2xl transition-colors"
                                     onClick={(e) => {
@@ -396,14 +597,14 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                 </div>
                 
                 <div className={`text-[10px] mt-1 px-1 opacity-0 ${msg.status !== 'sending' ? 'group-hover:opacity-100' : ''} transition-opacity select-none ${isMe ? 'text-slate-400 dark:text-slate-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                    {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    {formatTime(msg.created_at)}
                 </div>
             </div>
         </div>
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit }) { // [MODIFIED] Added onEdit
+export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate }) { // [MODIFIED] Added onRegenerate
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
 
@@ -527,7 +728,9 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                 onScroll={handleScroll}
             >
                 {messages.map((msg, index) => {
-                    const isMe = msg.user_id === currentUser.id;
+                    // [FIX] AI messages might have same user_id but are NOT 'me' for display purposes
+                    const isAi = msg.user_id === 'ai-assistant' || msg.author_name === 'Assistant' || (msg.meta && msg.meta.ai) || msg.isStreaming;
+                    const isMe = msg.user_id == currentUser.id && !isAi;
                     const isSystem = msg.type === 'system';
                     
                     if (isSystem) {
@@ -568,7 +771,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                                          {linkifyText(msg.content)}
                                      </span>
                                      <span className="text-[10px] text-slate-500 dark:text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">
-                                         {new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                         {formatTime(msg.created_at)}
                                      </span>
                                  </div>
                              </div>
@@ -587,6 +790,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onMarkHeard={handleMarkHeard}
                             onEdit={onEdit} 
                             onImageLoad={handleImageLoad}
+                            onRegenerate={onRegenerate}
                         />
                     );
                 })}

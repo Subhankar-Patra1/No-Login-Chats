@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
+import AIChatWindow from '../components/AIChatWindow';
 import CreateRoomModal from '../components/CreateRoomModal';
 import JoinRoomModal from '../components/JoinRoomModal';
 import GroupInfoModal from '../components/GroupInfoModal';
 import LogoutModal from '../components/LogoutModal';
 import io from 'socket.io-client';
 import { PresenceProvider } from '../context/PresenceContext';
+
+import { AiChatProvider } from '../context/AiChatContext';
 
 export default function Dashboard() {
     const { user, token, logout } = useAuth();
@@ -135,14 +138,18 @@ export default function Dashboard() {
 
         // [NEW] Chat cleared/deleted events
         newSocket.on('chat:cleared', ({ roomId }) => {
-            // Optional: Update last message snippet to "Messages cleared" or similar?
-            // For now, maybe just let it be or refresh?
-            // Let's at least ensure if it's active, we might need to know?
-            // ChatWindow handles the messages view. Dashboard handles the list.
-            // Maybe we just ignore for list or set unread to 0?
+            // Update rooms list
              setRooms(prev => prev.map(r => 
-                String(r.id) === String(roomId) ? { ...r, unread_count: 0 } : r
+                String(r.id) === String(roomId) ? { ...r, unread_count: 0, initialMessages: [] } : r
             ));
+            
+            // Update active room if matches
+            setActiveRoom(prev => {
+                if (prev && String(prev.id) === String(roomId)) {
+                    return { ...prev, initialMessages: [] };
+                }
+                return prev;
+            });
         });
 
         newSocket.on('chat:deleted', ({ roomId }) => {
@@ -314,24 +321,37 @@ export default function Dashboard() {
         
         setLoadingRoomId(room.id);
         
+        // [FIX] Switch immediately for UX, show loading in ChatWindow
+        setActiveRoom(room);
+
         try {
             const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/messages`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Cache-Control': 'no-cache'
+                }
             });
             
             if (res.ok) {
                 const data = await res.json();
                 const hydrated = hydrateMessages(data);
                 
-                // Pass messages WITH the room object so ChatWindow can init immediately
-                setActiveRoom({ ...room, initialMessages: hydrated });
+                // Only update if user hasn't switched away
+                // relying on activeRoomRef or checking current activeRoom state if we were inside a setter
+                // But setActiveRoom(prev => ...) is safer
+                setActiveRoom(prev => {
+                    if (prev && String(prev.id) === String(room.id)) {
+                        return { ...prev, initialMessages: hydrated };
+                    }
+                    return prev;
+                });
             } else {
                 console.error("Failed to fetch messages");
-                setActiveRoom(room); // Fallback to empty/loading inside if needed (or handle error)
+                // activeRoom is already set, so it stays valid but empty.
+                // Could handle error state inside ChatWindow if needed.
             }
         } catch (err) {
             console.error(err);
-            setActiveRoom(room);
         } finally {
             setLoadingRoomId(null);
         }
@@ -394,6 +414,7 @@ export default function Dashboard() {
 
     return (
         <PresenceProvider socket={socket}>
+            <AiChatProvider socket={socket}>
         <div className={`fixed inset-0 h-[100dvh] w-full bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden flex ${isResizing ? 'select-none cursor-col-resize' : ''} animate-dashboard-entry transition-colors`}>
             {/* Mobile: Sidebar hidden if activeRoom exists. Desktop: Always visible */}
             <div 
@@ -430,15 +451,27 @@ export default function Dashboard() {
                 flex-1 flex-col h-full bg-gray-50 dark:bg-slate-950 relative z-0 min-w-0 overflow-hidden transition-colors duration-300
             `}>
                 {activeRoom ? (
-                    <ChatWindow 
-                        key={activeRoom.id} // [NEW] Force re-mount for new room
-                        socket={socket} 
-                        room={activeRoom} // contains initialMessages now
-                        user={user} 
-                        onBack={() => setActiveRoom(null)}
-                        showGroupInfo={showGroupInfo}
-                        setShowGroupInfo={setShowGroupInfo}
-                    />
+                    activeRoom.type === 'ai' ? (
+                        <AIChatWindow
+                            key={activeRoom.id}
+                            socket={socket}
+                            room={activeRoom}
+                            user={user}
+                            isLoading={loadingRoomId === activeRoom.id}
+                            onBack={() => setActiveRoom(null)}
+                        />
+                    ) : (
+                        <ChatWindow 
+                            key={activeRoom.id} // [NEW] Force re-mount for new room
+                            socket={socket} 
+                            room={activeRoom} // contains initialMessages now
+                            user={user} 
+                            isLoading={loadingRoomId === activeRoom.id}
+                            onBack={() => setActiveRoom(null)}
+                            showGroupInfo={showGroupInfo}
+                            setShowGroupInfo={setShowGroupInfo}
+                        />
+                    )
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-500 dark:text-slate-400">
                         <div className="text-center">
@@ -493,6 +526,7 @@ export default function Dashboard() {
                 />
             )}
         </div>
+        </AiChatProvider>
         </PresenceProvider>
     );
 }

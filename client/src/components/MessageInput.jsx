@@ -12,6 +12,8 @@ const formatDuration = (ms) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+import AISendIcon from './icons/AISendIcon';
+
 export default function MessageInput({ 
     onSend, 
     onSendAudio, 
@@ -23,7 +25,10 @@ export default function MessageInput({
     onCancelEdit,
     onEditMessage,
     onTypingStart,
-    onTypingStop
+    onTypingStop,
+    isAi = false,
+    isGenerating = false, // [FIX] Add missing prop
+    onStop = () => {}     // [FIX] Add missing prop
 }) {
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -452,7 +457,7 @@ export default function MessageInput({
                                     <PickerPanel 
                                         onEmojiClick={handleEmojiClick}
                                         onGifClick={handleGifClick}
-                                        disableGifTab={!!pendingGif}
+                                        disableGifTab={isAi || !!pendingGif}
                                     />
                                 </div>
                             )}
@@ -471,11 +476,9 @@ export default function MessageInput({
                             
                             {!hasText && (
                                 <div className="absolute left-4 top-3 text-slate-400 dark:text-slate-500 pointer-events-none select-none transition-colors">
-                                    {disabled 
-                                        ? "Room expired..." 
-                                        : pendingGif 
-                                            ? "Enter caption (optional)..." 
-                                            : "Type a message..."
+                                    {pendingGif 
+                                        ? "Enter caption (optional)..." 
+                                        : "Type a message..."
                                     }
                                 </div>
                             )}
@@ -498,19 +501,30 @@ export default function MessageInput({
                     </div>
                 </div>
 
-                {hasContent ? (
+                {hasContent || isAi ? ( // [FIX] Always show Send button for AI (hide Mic)
                     <button 
-                        type="submit" 
+                        type={isGenerating ? "button" : "submit"} // [FIX] Type button for Stop to prevent submit
+                        onClick={isGenerating ? onStop : undefined} // [FIX] Call stop handler
                         className={`
                             p-3 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0
-                            ${disabled 
+                            ${disabled && !isGenerating // [FIX] If disabled but NOT generating (e.g. just thinking), show disabled style. If generating, show Stop style.
                                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed' 
-                                : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 hover:scale-105 active:scale-95'
+                                : isGenerating
+                                    ? 'bg-slate-200 dark:bg-slate-700 text-red-500 hover:bg-slate-300 dark:hover:bg-slate-600 shadow-sm border border-red-200 dark:border-red-900/30' // Stop button style
+                                : !hasContent
+                                    ? 'bg-violet-600/50 text-white/50 cursor-default shadow-none' 
+                                    : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20 hover:scale-105 active:scale-95'
                             }
                         `}
-                        disabled={disabled}
+                        disabled={disabled && !isGenerating} // Enable if generating (to click stop)
                     >
-                        <span className="material-symbols-outlined">send</span>
+                        {isGenerating ? (
+                             <span className="material-symbols-outlined animate-pulse">stop_circle</span>
+                        ) : isAi ? (
+                            <AISendIcon className="w-6 h-6 text-white" />
+                        ) : (
+                            <span className="material-symbols-outlined">send</span>
+                        )}
                     </button>
                 ) : (
                     <button 
