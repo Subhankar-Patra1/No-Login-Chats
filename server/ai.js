@@ -383,7 +383,7 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
                      
                      if (saveRes.rows.length > 0) {
                         savedMsgId = saveRes.rows[0].id;
-                        savedCreatedAt = saveRes.rows[0].created_at;
+                        savedCreatedAt = createdAt;
                      }
                  }
                  
@@ -396,7 +396,7 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
                         content: fullText,
                         author_name: 'Assistant',
                         display_name: currentName, 
-                        created_at: savedCreatedAt.toISOString(),
+                        created_at: new Date(savedCreatedAt).toISOString(),
                         ai: true,
                         meta: { ai: true, model: MODEL, operationId, cancelled: isCancelled } 
                     });

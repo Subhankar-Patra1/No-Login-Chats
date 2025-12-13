@@ -84,11 +84,33 @@ export default function Dashboard() {
         });
 
         newSocket.on('room_added', (newRoom) => {
+            console.log('[DEBUG-CLIENT] room_added received:', newRoom);
             setRooms(prev => {
                 if (prev.find(r => r.id === newRoom.id)) return prev;
                 return [newRoom, ...prev];
             });
             newSocket.emit('join_room', newRoom.id);
+        });
+
+        // ... existing listeners ...
+
+        // [NEW] Force refresh rooms list (fallback for syncing)
+        newSocket.on('rooms:refresh', () => {
+             console.log('[DEBUG-CLIENT] rooms:refresh received. Fetching data...');
+             const fetchData = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setRooms(data);
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+            fetchData();
         });
 
         newSocket.on('new_message', (msg) => {
@@ -157,6 +179,25 @@ export default function Dashboard() {
             if (activeRoomRef.current && String(activeRoomRef.current.id) === String(roomId)) {
                 setActiveRoom(null);
             }
+        });
+
+        // [NEW] Force refresh rooms list (fallback for syncing)
+        newSocket.on('rooms:refresh', () => {
+            console.log('[DEBUG] Received rooms:refresh request');
+            const fetchData = async () => {
+                try {
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setRooms(data);
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+            fetchData();
         });
 
         // [NEW] Group Avatar/Bio Updates

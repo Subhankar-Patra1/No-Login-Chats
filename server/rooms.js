@@ -159,8 +159,8 @@ router.post('/', async (req, res) => {
             const roomId = insertRoomRes.rows[0].id;
 
             // Add both users
-            await db.query('INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, $3)', [roomId, req.user.id, 'owner']);
-            await db.query('INSERT INTO room_members (room_id, user_id, role) VALUES ($1, $2, $3)', [roomId, targetUserId, 'member']);
+            await db.query('INSERT INTO room_members (room_id, user_id, role, is_hidden) VALUES ($1, $2, $3, $4)', [roomId, req.user.id, 'owner', false]);
+            await db.query('INSERT INTO room_members (room_id, user_id, role, is_hidden) VALUES ($1, $2, $3, $4)', [roomId, targetUserId, 'member', true]);
 
             // Fetch created room
             const roomRes = await db.query('SELECT * FROM rooms WHERE id = $1', [roomId]);
@@ -176,19 +176,9 @@ router.post('/', async (req, res) => {
                 avatar_url: targetUser.avatar_url
             };
             
-            // Prepare payload for target user
-            const roomForTarget = { 
-                ...room, 
-                name: creator.display_name,
-                username: creator.username,
-                other_user_id: req.user.id,
-                avatar_thumb_url: creator.avatar_thumb_url,
-                avatar_url: creator.avatar_url
-            };
-
-            // Emit event to target user
-            const io = req.app.get('io');
-            io.to(`user:${targetUserId}`).emit('room_added', roomForTarget);
+            // [FIX] Do NOT emit room_added to target yet. Wait for first message.
+            // const roomForTarget = { ... };
+            // io.to(`user:${targetUserId}`).emit('room_added', roomForTarget);
 
             res.json(roomForCreator);
 
@@ -458,7 +448,11 @@ router.get('/:id/messages', async (req, res) => {
                     // ignore
                 }
             }
-            return { ...msg, audio_waveform: parsedWaveform };
+            return { 
+                ...msg, 
+                audio_waveform: parsedWaveform,
+                created_at: msg.created_at
+            };
         });
 
         res.json(messages);

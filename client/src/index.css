@@ -182,16 +182,18 @@
 /* Existing pulse (keep as is or refine) */
 @keyframes replyPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7);
-    background-color: rgba(139, 92, 246, 0.12);
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 1);
+    background-color: rgba(139, 92, 246, 0.3);
+    z-index: 50;
   }
-  50% {
-    box-shadow: 0 0 0 10px rgba(139, 92, 246, 0);
-    background-color: rgba(139, 92, 246, 0.22);
+  25% {
+     box-shadow: 0 0 0 8px rgba(139, 92, 246, 0.6);
+     background-color: rgba(139, 92, 246, 0.5);
   }
   100% {
     box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
     background-color: transparent;
+    z-index: auto;
   }
 }
 
@@ -209,10 +211,11 @@
 }
 
 /* Apply both: quick shake + slower pulse */
-.reply-highlight {
+.reply-highlight .message-bubble {
   animation:
     replyShake 0.5s ease-in-out both,
-    replyPulse 1.6s ease-out;
+    replyPulse 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  position: relative;
 }
 
 @keyframes fadeInUp {

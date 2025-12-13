@@ -21,38 +21,13 @@ const formatDuration = (ms) => {
 
 const formatTime = (dateString) => {
     if (!dateString) return '';
-    
-    let date;
-    
-    // Handle Date objects directly
-    if (dateString instanceof Date) {
-        date = dateString;
-    } else {
-        let s = String(dateString);
-        
-        // Normalize: "2023-01-01 12:00:00" -> "2023-01-01T12:00:00"
-        if (s.includes(' ') && !s.includes('T')) {
-            s = s.replace(' ', 'T');
-        }
-        
-        // Truncate milliseconds to 3 digits (e.g. .123456 -> .123) to avoid JS parsing issues
-        s = s.replace(/(\.\d{3})\d+/, '$1');
-
-        // Heuristic: If valid ISO-like string but missing Z and offset, treat as UTC
-        // Check for Z or +HH:mm or -HH:mm at the end
-        // Simple check: if it ends in a digit, it's likely missing timezone info
-        const hasTimezone = /[Zz]|[+\-]\d{2}(:?\d{2})?$/.test(s);
-        
-        if (!hasTimezone) {
-             s += 'Z'; // Assume UTC for server timestamps
-        }
-
-        date = new Date(s);
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '';
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+        return '';
     }
-    
-    if (isNaN(date.getTime())) return '';
-
-    return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 };
 
 const CodeBlock = ({ inline, className, children, ...props }) => {
@@ -138,7 +113,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
         el.classList.add("reply-highlight");
         setTimeout(() => {
             el.classList.remove("reply-highlight");
-        }, 1600);
+        }, 2000);
     };
 
     const handleDeleteForMe = async () => {
@@ -239,6 +214,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                 
                 <div className="relative group">
                     <div className={`
+                        message-bubble
                         px-4 py-3 shadow-md text-sm leading-relaxed break-all relative overflow-hidden
                         ${isMe 
                             ? 'bg-violet-600 text-white rounded-2xl rounded-tr-sm whitespace-pre-wrap' 
@@ -699,7 +675,10 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
         
         if (shouldScrollToBottom.current) {
             if (messages.length > 0) {
-                bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+                // [FIX] Use setTimeout to ensure DOM is fully painted/layout is done before scrolling
+                setTimeout(() => {
+                    bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+                }, 100);
                 shouldScrollToBottom.current = false;
             }
         } else {

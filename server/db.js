@@ -1,5 +1,10 @@
 process.env.PGTZ = 'UTC'; // Force Postgres to treat timestamps as UTC
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// Force timestamp (1114) to be parsed as UTC string
+types.setTypeParser(1114, (str) => {
+    return str + 'Z'; // Append Z so JS treats it as UTC
+});
 require('dotenv').config();
 
 const pool = new Pool({

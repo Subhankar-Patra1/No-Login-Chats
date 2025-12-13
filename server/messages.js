@@ -65,6 +65,9 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
         );
         
         const info = result.rows[0];
+        // Ensure strictly ISO string
+        const createdAtISO = info.created_at;
+
 
         // Fetch user display name
         const userRes = await db.query('SELECT display_name, avatar_thumb_url, avatar_url FROM users WHERE id = $1', [req.user.id]);
@@ -88,7 +91,9 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
             audio_waveform: parsedWaveform, 
             status: info.status,
             reply_to_message_id: replyToMessageId,
-            created_at: info.created_at,
+            reply_to_message_id: replyToMessageId,
+            created_at: createdAtISO,
+
             username: req.user.username,
             display_name: user ? user.display_name : req.user.display_name,
             avatar_thumb_url: user ? user.avatar_thumb_url : null,
@@ -111,6 +116,8 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const { room_id, type = 'text', content, gif_url, preview_url, width, height, tempId, replyToMessageId } = req.body;
+        console.log(`[DEBUG] POST /messages hit. RoomID: ${room_id}, Type: ${type}, User: ${req.user.id}`);
+        const io = req.app.get('io');
         
         // Basic validation
         if (!room_id) return res.status(400).json({ error: 'room_id is required' });
@@ -166,9 +173,83 @@ router.post('/', async (req, res) => {
 
         const result = await db.query(query, params);
         const info = result.rows[0];
+        // Ensure strictly ISO string
+        const createdAtISO = info.created_at;
 
-        // Unhide chat for all members
-        await db.query('UPDATE room_members SET is_hidden = FALSE WHERE room_id = $1', [room_id]);
+
+
+        // [FIX] Explicitly find who is hidden BEFORE updating
+        console.log(`[DEBUG] Handling invisible check for room ${room_id}`);
+        const hiddenMembersRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND is_hidden = TRUE', [room_id]);
+        const hiddenUserIds = hiddenMembersRes.rows.map(r => r.user_id);
+        console.log(`[DEBUG] Found hidden members in room ${room_id}:`, hiddenUserIds);
+        
+        // Unhide for everyone (ensure consistency)
+        const updateRes = await db.query('UPDATE room_members SET is_hidden = FALSE WHERE room_id = $1', [room_id]);
+        console.log(`[DEBUG] Updated room ${room_id} visibility. RowCount: ${updateRes.rowCount}`);
+        
+        console.log('[DEBUG] Previously hidden users:', hiddenUserIds);
+
+        // We can also just broadcast to ALL other members to be safe, client dedups.
+        // But let's prioritize the hidden ones + anyone else who might be missing it?
+        // Let's stick to hidden ones first. If logic holds, they are the ones missing it.
+        // If the user was NOT hidden but client missing it? (Bug state).
+        // Let's effectively emit to ALL other participants to be 100% sure.
+        
+        const allMembersRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1', [room_id]);
+        const allMemberIds = allMembersRes.rows.map(r => r.user_id); // Includes sender
+        
+        if (allMemberIds.length > 0) {
+             // Fetch room data ONCE
+             const roomQuery = await db.query('SELECT * FROM rooms WHERE id = $1', [room_id]);
+             const roomData = roomQuery.rows[0];
+
+             for (const recipientId of allMemberIds) {
+                 if (recipientId == req.user.id) continue;
+
+                 // Optimization: If they were NOT hidden, they probably have it?
+                 // But user report suggests flakiness. Let's send to all. Client handles duplicates.
+                 io.to(`user:${recipientId}`).emit('rooms:refresh'); // [FIX] Force refresh as fallback
+
+                 // We need to shape the room object for THIS recipient (swapping names/avatars)
+                 // Using the robust query from rooms.js + unread_count logic
+                 const recipientRoomRes = await db.query(`
+                    SELECT r.*, rm.role, rm.last_read_at,
+                    (SELECT u.display_name FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_name,
+                    (SELECT u.username FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_username,
+                    (SELECT u.avatar_thumb_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_thumb,
+                    (SELECT u.avatar_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_url,
+                    (SELECT u.id FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_id,
+                    (SELECT u.display_name FROM users u WHERE u.id = r.created_by) as creator_name,
+                    (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
+                    (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.last_read_at, '1970-01-01')) as unread_count,
+                    gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members
+                    FROM rooms r 
+                    JOIN room_members rm ON r.id = rm.room_id 
+                    LEFT JOIN group_permissions gp ON r.id = gp.group_id
+                    WHERE r.id = $2 AND rm.user_id = $1
+                 `, [recipientId, room_id]);
+                 
+                 const rawRoom = recipientRoomRes.rows[0];
+                 if (rawRoom) {
+                     const formattedRoom = {
+                        ...rawRoom,
+                        name: rawRoom.type === 'direct' ? (rawRoom.other_user_name || 'Unknown User') : rawRoom.name,
+                        username: rawRoom.type === 'direct' ? rawRoom.other_user_username : null,
+                        other_user_id: rawRoom.type === 'direct' ? rawRoom.other_user_id : null,
+                        avatar_thumb_url: rawRoom.type === 'direct' ? rawRoom.other_user_avatar_thumb : rawRoom.avatar_thumb_url,
+                        avatar_url: rawRoom.type === 'direct' ? rawRoom.other_user_avatar_url : rawRoom.avatar_url,
+                        creator_name: rawRoom.creator_name,
+                        creator_username: rawRoom.creator_username,
+                        unread_count: parseInt(rawRoom.unread_count || 0) // Ensure number
+                     };
+                     
+                     io.to(`user:${recipientId}`).emit('room_added', formattedRoom);
+                 } else {
+                     // console.log(`[DEBUG] Failed to fetch rawRoom for user:${recipientId} room:${room_id}`);
+                 }
+             }
+         }
 
         // Fetch user info for broadcast
         const userRes = await db.query('SELECT display_name, avatar_thumb_url, avatar_url FROM users WHERE id = $1', [req.user.id]);
@@ -186,7 +267,9 @@ router.post('/', async (req, res) => {
             height,
             status: info.status,
             reply_to_message_id: info.reply_to_message_id,
-            created_at: info.created_at,
+            reply_to_message_id: info.reply_to_message_id,
+            created_at: createdAtISO,
+
             username: req.user.username,
             display_name: user ? user.display_name : req.user.display_name,
             avatar_thumb_url: user ? user.avatar_thumb_url : null,
@@ -195,7 +278,6 @@ router.post('/', async (req, res) => {
         };
 
         // Broadcast
-        const io = req.app.get('io');
         io.to(`room:${room_id}`).emit('new_message', message);
 
         res.json(message);

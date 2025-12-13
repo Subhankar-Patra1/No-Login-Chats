@@ -111,19 +111,24 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
             <div className="p-4 pb-2">
                 <div className="flex p-1 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800/50 transition-colors">
                     <button 
-                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${tab === 'group' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative ${tab === 'group' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                         onClick={() => setTab('group')}
                     >
                         Groups
+                        {rooms.filter(r => r.type === 'group' && r.unread_count > 0).length > 0 && (
+                            <span className="absolute -top-1 -right-0 min-w-[18px] h-[18px] bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full px-1 border-2 border-white dark:border-slate-900">
+                                {rooms.filter(r => r.type === 'group' && r.unread_count > 0).length > 99 ? '99+' : rooms.filter(r => r.type === 'group' && r.unread_count > 0).length}
+                            </span>
+                        )}
                     </button>
                     <button 
                         className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 relative ${tab === 'direct' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                         onClick={() => setTab('direct')}
                     >
                         Direct
-                        {rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0) > 0 && (
+                        {rooms.filter(r => r.type === 'direct' && r.unread_count > 0).length > 0 && (
                             <span className="absolute -top-1 -right-0 min-w-[18px] h-[18px] bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center rounded-full px-1 border-2 border-white dark:border-slate-900">
-                                {rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0) > 99 ? '99+' : rooms.filter(r => r.type === 'direct').reduce((acc, r) => acc + (r.unread_count || 0), 0)}
+                                {rooms.filter(r => r.type === 'direct' && r.unread_count > 0).length > 99 ? '99+' : rooms.filter(r => r.type === 'direct' && r.unread_count > 0).length}
                             </span>
                         )}
                     </button>

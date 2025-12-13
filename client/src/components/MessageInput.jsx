@@ -584,6 +584,12 @@ export default function MessageInput({
                     </button>
                 )}
             </form>
+
+            {isAi && (
+                <p className="mt-3 text-center text-[11px] text-slate-400 dark:text-slate-500 font-medium opacity-80 select-none cursor-default max-w-2xl mx-auto leading-relaxed">
+                    AI can make mistakes, so double-check it. Sparkle AI is in beta version, so some features may not work at this moment.
+                </p>
+            )}
         </div>
     );
 }

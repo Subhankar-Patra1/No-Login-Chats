@@ -350,6 +350,64 @@ io.on('connection', async (socket) => {
                     tempId: tempId // Return the tempId to the client
                 };
 
+                // [FIX] Handle invisible check for room (Logic ported from server/messages.js)
+                const hiddenMembersRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND is_hidden = TRUE', [roomId]);
+                const hiddenUserIds = hiddenMembersRes.rows.map(r => r.user_id);
+                
+                if (hiddenUserIds.length > 0) {
+                     // Unhide for everyone
+                     await db.query('UPDATE room_members SET is_hidden = FALSE WHERE room_id = $1', [roomId]);
+                     
+                     // Get all members to notify if they were missing the room
+                     const allMembersRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1', [roomId]);
+                     const allMemberIds = allMembersRes.rows.map(r => r.user_id);
+ 
+                     for (const recipientId of allMemberIds) {
+                         if (recipientId == socket.user.id) continue;
+                         
+                         // Determine if we should send room update.
+                         // Prudent to send if they were hidden OR just to be safe.
+                         if (hiddenUserIds.includes(recipientId)) {
+                              console.log('[DEBUG-SOCKET] Emitting room_added/refresh to previously hidden user:', recipientId);
+                              io.to(`user:${recipientId}`).emit('rooms:refresh');
+ 
+                              const recipientRoomRes = await db.query(`
+                                 SELECT r.*, rm.role, rm.last_read_at,
+                                 (SELECT u.display_name FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_name,
+                                 (SELECT u.username FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_username,
+                                 (SELECT u.avatar_thumb_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_thumb,
+                                 (SELECT u.avatar_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_url,
+                                 (SELECT u.id FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_id,
+                                 (SELECT u.display_name FROM users u WHERE u.id = r.created_by) as creator_name,
+                                 (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
+                                 (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.last_read_at, '1970-01-01')) as unread_count,
+                                 gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members
+                                 FROM rooms r 
+                                 JOIN room_members rm ON r.id = rm.room_id 
+                                 LEFT JOIN group_permissions gp ON r.id = gp.group_id
+                                 WHERE r.id = $2 AND rm.user_id = $1
+                              `, [recipientId, roomId]);
+                              
+                              const rawRoom = recipientRoomRes.rows[0];
+                              if (rawRoom) {
+                                  const formattedRoom = {
+                                     ...rawRoom,
+                                     name: rawRoom.type === 'direct' ? (rawRoom.other_user_name || 'Unknown User') : rawRoom.name,
+                                     username: rawRoom.type === 'direct' ? rawRoom.other_user_username : null,
+                                     other_user_id: rawRoom.type === 'direct' ? rawRoom.other_user_id : null,
+                                     avatar_thumb_url: rawRoom.type === 'direct' ? rawRoom.other_user_avatar_thumb : rawRoom.avatar_thumb_url,
+                                     avatar_url: rawRoom.type === 'direct' ? rawRoom.other_user_avatar_url : rawRoom.avatar_url,
+                                     creator_name: rawRoom.creator_name,
+                                     creator_username: rawRoom.creator_username,
+                                     unread_count: parseInt(rawRoom.unread_count || 0)
+                                  };
+                                  
+                                  io.to(`user:${recipientId}`).emit('room_added', formattedRoom);
+                              }
+                         }
+                     }
+                }
+
                 io.to(`room:${roomId}`).emit('new_message', message);
             } else {
                 console.log(`User ${socket.user.username} tried to send message to room ${roomId} but is not a member`);

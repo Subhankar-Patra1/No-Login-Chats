@@ -99,7 +99,6 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const typingTimeoutsRef = useRef({});
 
     const headerRef = useRef(null);
-    const messagesEndRef = useRef(null);
 
     // Restriction Logic
     const [showPrivilegedModal, setShowPrivilegedModal] = useState(false);
@@ -535,13 +534,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     };
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
 
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
 
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 relative overflow-hidden transition-colors">

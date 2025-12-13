@@ -57,8 +57,7 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
     const { messages, isAiThinking, currentAiOp, insertIndex } = getChatState(room.id);
 
     // We don't need typing users or privileged modals for AI chat
-    const [replyTo, setReplyTo] = useState(null); 
-    const messagesEndRef = useRef(null);
+    const [replyTo, setReplyTo] = useState(null);
     const justClearedRef = useRef(false);
 
     // Initial Load & Normalization
@@ -94,10 +93,7 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
         
     }, [room.id, room.initialMessages, aiName, registerRoom, syncMessages]);
 
-    // Scroll effect
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, currentAiOp, isAiThinking]);
+
 
     const handleSend = (content, replyToMsg) => {
         setReplyTo(null);
