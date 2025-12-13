@@ -208,13 +208,13 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                 <div className="px-4 pb-1">
                     <button 
                         onClick={() => setViewArchived(true)}
-                        className="w-full flex items-center justify-between p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-colors text-sm font-medium"
+                        className="w-full flex items-center justify-between p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-md transition-colors text-sm font-medium"
                     >
                         <div className="flex items-center gap-2">
                              <span className="material-symbols-outlined text-[18px]">inventory_2</span>
                              <span>Archived</span>
                         </div>
-                        <span className="text-xs bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">
+                        <span className="text-xs bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
                             {rooms.filter(r => r.is_archived).length}
                         </span>
                     </button>
@@ -320,8 +320,32 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
                                 )}
                             </div>
-                            
-                            {/* Loading Indicator or Badge */}
+                            </div>
+
+                         {/* Right Side Column: Menu + Badge */}
+                         <div className="flex flex-col items-end gap-1 ml-2">
+                            {/* Three-dot Menu Button - Shows on Hover */}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setContextMenu({
+                                        visible: true,
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        room: room
+                                    });
+                                }}
+                                className={`w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 flex items-center justify-center transition-all shrink-0 mb-auto ${
+                                    contextMenu.visible && contextMenu.room?.id === room.id 
+                                    ? 'opacity-100 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' 
+                                    : 'opacity-0 group-hover:opacity-100'
+                                }`}
+                                title="More options"
+                            >
+                                <span className="material-symbols-outlined text-[16px]">more_horiz</span>
+                            </button>
+
+                            {/* Loading Indicator or Badge - At Bottom */}
                             {loadingRoomId === room.id ? (
                                 <div className="w-5 h-5 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin"></div>
                             ) : (

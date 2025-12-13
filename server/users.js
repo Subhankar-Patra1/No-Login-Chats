@@ -332,5 +332,67 @@ router.get('/:id/profile', async (req, res) => {
     }
 });
 
+// 5. Delete Account
+router.delete('/me', async (req, res) => {
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Get user data for S3 cleanup
+        const userRes = await client.query('SELECT avatar_key FROM users WHERE id = $1', [req.user.id]);
+        if (userRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const user = userRes.rows[0];
+
+        // 2. Anonymize Messages (Prevent cascading delete)
+        await client.query('UPDATE messages SET user_id = NULL WHERE user_id = $1', [req.user.id]);
+
+        // 3. Update Rooms created by user
+        await client.query('UPDATE rooms SET created_by = NULL WHERE created_by = $1', [req.user.id]);
+
+        // 4. Delete User (Cascades to room_members, audio_play_state, etc.)
+        await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+
+        await client.query('COMMIT');
+
+        // 5. Cleanup S3 (Async)
+        if (user.avatar_key) {
+             try {
+                 await deleteObject(user.avatar_key);
+                 if (user.avatar_key.includes('-avatar.')) {
+                    const thumbKey = user.avatar_key.replace('-avatar.', '-thumb.');
+                    await deleteObject(thumbKey).catch(e => console.warn("Failed to delete thumb S3", e));
+                }
+             } catch(e) { console.error("S3 cleanup failed", e); }
+        }
+
+        // 6. Cleanup Redis
+        try {
+            const redis = require('./redis');
+            // Remove sessions
+            const sessions = await redis.client.sMembers(`user:${req.user.id}:sessions`);
+            if (sessions && sessions.length > 0) {
+                // redis.del accepts string or array in newer versions, check types
+                // If using 'redis' package v4+, .del takes array? No, usually separate args or array depends on adapter.
+                // Node redis v4: .del([key1, key2]) or .del(key).
+                await redis.client.del(sessions.map(s => `session:${s}`));
+            }
+            await redis.client.del(`user:${req.user.id}:sessions`);
+            await redis.client.del(`user:${req.user.id}:last_seen`);
+        } catch (e) { console.error("Redis cleanup failed", e); }
+
+        res.json({ success: true });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("Delete account error:", err);
+        res.status(500).json({ error: "Failed to delete account" });
+    } finally {
+        client.release();
+    }
+});
+
 module.exports = router;
 

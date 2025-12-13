@@ -431,7 +431,7 @@ router.get('/:id/messages', async (req, res) => {
                    m.created_at,
                    u.display_name, u.username, u.avatar_thumb_url, u.avatar_url 
             FROM messages m 
-            JOIN users u ON m.user_id = u.id 
+            LEFT JOIN users u ON m.user_id = u.id 
             LEFT JOIN audio_play_state aps ON m.id = aps.message_id AND aps.user_id = $2
             JOIN room_members rm_curr ON rm_curr.room_id = m.room_id AND rm_curr.user_id = $2
             WHERE m.room_id = $1 

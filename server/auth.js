@@ -9,6 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 router.post('/signup', async (req, res) => {
     const { username, displayName, password } = req.body;
+    console.log('[DEBUG-SIGNUP] Body:', JSON.stringify(req.body));
     
     if (!username || !displayName || !password) {
         return res.status(400).json({ error: 'Missing fields' });

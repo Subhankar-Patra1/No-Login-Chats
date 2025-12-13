@@ -23,7 +23,7 @@ const timeAgo = (dateString) => {
 };
 
 export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess }) {
-    const { token, user: currentUser, updateUser } = useAuth();
+    const { token, user: currentUser, updateUser, logout } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -283,9 +283,27 @@ export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess 
                 if (res.ok) {
                     const data = await res.json();
                     setProfile(data);
+                } else {
+                     // Handle 404 or other errors as deleted/inaccessible
+                     setProfile({
+                        display_name: 'Deleted Account',
+                        username: 'deleted',
+                        bio: 'This account no longer exists.',
+                        avatar_url: null,
+                        avatar_thumb_url: null,
+                        groups_in_common: []
+                    });
                 }
             } catch (err) {
                 console.error(err);
+                setProfile({
+                    display_name: 'Deleted Account',
+                    username: 'deleted',
+                    bio: 'This account no longer exists.',
+                    avatar_url: null,
+                    avatar_thumb_url: null,
+                    groups_in_common: []
+                });
             } finally {
                 setLoading(false);
             }
@@ -294,6 +312,17 @@ export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess 
         if (userId) {
             fetchProfile();
             fetchStatuses([userId]);
+        } else {
+            // Handle case where userId is null/undefined (e.g. from a message of a deleted user)
+             setProfile({
+                display_name: 'Deleted Account',
+                username: 'deleted',
+                bio: 'This account no longer exists.',
+                avatar_url: null,
+                avatar_thumb_url: null,
+                groups_in_common: []
+            });
+            setLoading(false);
         }
     }, [userId, token]);
 
@@ -345,6 +374,26 @@ export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess 
                 setConfirmModal(null);
                 onClose(); // Close panel first
                 if (onActionSuccess) onActionSuccess('delete');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        setActionLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/me`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                setConfirmModal(null);
+                onClose();
+                logout();
             }
         } catch (err) {
             console.error(err);
@@ -812,6 +861,22 @@ export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess 
                                     <span className="text-sm font-bold">Delete chat</span>
                                 </button>
                             </>
+                        )}
+                        
+                        {isMe && (
+                             <button 
+                                onClick={() => setConfirmModal({ 
+                                    type: 'account_delete', 
+                                    title: 'Delete Account?', 
+                                    desc: 'This will permanently delete your account. Messages will be anonymized. This cannot be undone.',
+                                    actionReq: handleDeleteAccount,
+                                    destructive: true
+                                })}
+                                className="w-full flex items-center gap-4 p-3 hover:bg-red-50 dark:hover:bg-slate-800/50 rounded-lg text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
+                            >
+                                <span className="material-symbols-outlined">no_accounts</span>
+                                <span className="text-sm font-bold">Delete Account</span>
+                            </button>
                         )}
                     </div>
                 </div>
