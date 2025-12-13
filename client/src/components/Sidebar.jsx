@@ -312,12 +312,30 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                             )}
                         </div>
                         <div className="flex-1 min-w-0 flex justify-between items-center">
-                            <div>
+                            <div className="min-w-0">
                                 <span className="truncate font-medium block">
                                     {room.type === 'ai' ? 'Sparkle AI' : linkifyText(room.name)}
                                 </span>
-                                {room.type === 'group' && (
+                                {room.type === 'group' && !room.last_message_content && !room.last_message_type ? (
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
+                                ) : (
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
+                                        {room.last_message_sender_id === user.id && (
+                                            <span className={`material-symbols-outlined text-[16px] ${
+                                                room.last_message_status === 'seen' ? 'text-blue-500' :
+                                                room.last_message_status === 'delivered' ? 'text-slate-400' :
+                                                'text-slate-400'
+                                            }`}>
+                                                {room.last_message_status === 'sent' ? 'check' : 'done_all'}
+                                            </span>
+                                        )}
+                                        <span className="truncate flex-1">
+                                            {room.last_message_type === 'image' ? 'Sent an image' :
+                                             room.last_message_type === 'audio' ? 'Sent an audio' :
+                                             room.last_message_type === 'gif' ? 'Sent a GIF' :
+                                             renderTextWithEmojis(room.last_message_content || 'No messages yet')}
+                                        </span>
+                                    </div>
                                 )}
                             </div>
                             </div>

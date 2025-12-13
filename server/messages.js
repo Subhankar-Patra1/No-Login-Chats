@@ -62,7 +62,11 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
              VALUES ($1, $2, 'audio', $3, $4, $5, 'Voice message', $6) 
              RETURNING id, status, created_at`,
             [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null]
+            [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null]
         );
+        
+        // [NEW] Update Room Last Message At
+        await db.query('UPDATE rooms SET last_message_at = NOW() WHERE id = $1', [roomId]);
         
         const info = result.rows[0];
         // Ensure strictly ISO string
@@ -172,6 +176,10 @@ router.post('/', async (req, res) => {
         }
 
         const result = await db.query(query, params);
+        
+        // [NEW] Update Room Last Message At
+        await db.query('UPDATE rooms SET last_message_at = NOW() WHERE id = $1', [room_id]);
+
         const info = result.rows[0];
         // Ensure strictly ISO string
         const createdAtISO = info.created_at;

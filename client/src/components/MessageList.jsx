@@ -77,7 +77,7 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
     );
 };
 
-const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate }) => { // [MODIFIED] Added onRegenerate
+const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate, searchTerm }) => { // [MODIFIED] Added searchTerm
     const [showMenu, setShowMenu] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false); // [NEW] Feedback state
     const menuRef = useRef(null);
@@ -258,8 +258,8 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                         <span>GIF</span>
                                     </div>
                                 ) : (
-                                    <div className="text-xs opacity-80 line-clamp-2">
-                                        {msg.replyTo.text}
+                                    <div className="text-xs opacity-80 line-clamp-2 flex items-center gap-1">
+                                        {renderTextWithEmojis(msg.replyTo.text)}
                                     </div>
                                 )}
                             </div>
@@ -333,7 +333,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             </div>
                             {msg.content && msg.content !== 'GIF' && (
                                 <p className="text-sm mt-1 whitespace-pre-wrap break-words">
-                                    {linkifyText(msg.content)}
+                                    {linkifyText(msg.content, searchTerm)}
                                 </p>
                             )}
                             </>
@@ -356,7 +356,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     </ReactMarkdown>
                                 ) : (
                                      <>
-                                        {linkifyText(msg.content)}
+                                        {linkifyText(msg.content, searchTerm)}
                                         {msg.edited_at && (
                                             <span className="text-[10px] opacity-60 ml-1">(edited)</span>
                                         )}
@@ -376,7 +376,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 {msg.status === 'sending' && <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>}
                                 {msg.status === 'error' && <span className="material-symbols-outlined text-[14px] text-red-300">error</span>}
                                 {msg.status === 'sent' && <span className="material-symbols-outlined text-[14px]">check</span>}
-                                {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px]">done_all</span>}
+                                {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px] text-slate-300 dark:text-slate-400">done_all</span>}
                                 {msg.status === 'seen' && <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>}
                             </div>
                         )}
@@ -602,7 +602,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate }) { // [MODIFIED] Added onRegenerate
+export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate, searchTerm }) { // [MODIFIED] Added searchTerm
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
 
@@ -792,6 +792,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onEdit={onEdit} 
                             onImageLoad={handleImageLoad}
                             onRegenerate={onRegenerate}
+                            searchTerm={searchTerm} // [MODIFIED] Pass search term
                         />
                     );
                 })}

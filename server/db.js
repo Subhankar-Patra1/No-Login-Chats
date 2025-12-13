@@ -99,6 +99,22 @@ const createTables = async () => {
             ALTER TABLE room_members ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMP DEFAULT NULL;
             ALTER TABLE room_members ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN DEFAULT FALSE;
             ALTER TABLE room_members ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
+
+            -- [NEW] Migration for rooms (Ordering)
+            ALTER TABLE rooms ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            
+            -- Backfill last_message_at if it's default (creation time) but messages exist
+            DO $$
+            BEGIN
+                -- Only run if there are rooms where last_message_at is potentially stale or default
+                -- We update all rooms to be safe, setting it to the MAX(message.created_at)
+                UPDATE rooms r
+                SET last_message_at = (
+                    SELECT COALESCE(MAX(m.created_at), r.created_at)
+                    FROM messages m
+                    WHERE m.room_id = r.id
+                );
+            END $$;
              
             -- Migration for messages (Editing)
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP;

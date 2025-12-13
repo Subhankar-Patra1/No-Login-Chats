@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
+
 const GroupAddParticipantsView = ({
     room,
     onAddMember,
@@ -25,7 +27,7 @@ const GroupAddParticipantsView = ({
             try {
                 const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/search?q=${encodeURIComponent(q)}&excludeGroupId=${room.id}`, {
                     headers: { Authorization: `Bearer ${token}` }
-                });
+                    });
                 const data = await res.json();
                 setSearchResults(data);
             } catch (err) {
@@ -119,7 +121,7 @@ const GroupAddParticipantsView = ({
                             )}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate transition-colors">{user.display_name}</div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate transition-colors">{renderTextWithEmojis(user.display_name)}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-500 truncate transition-colors">@{user.username}</div>
                         </div>
                         {adding ? (

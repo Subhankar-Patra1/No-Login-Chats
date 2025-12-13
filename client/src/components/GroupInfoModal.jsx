@@ -4,6 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
 import { linkifyText, textToHtml } from '../utils/linkify';
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
 import AvatarEditorModal from './AvatarEditorModal';
 import GroupPermissionsView from './GroupPermissionsView';
@@ -783,8 +784,8 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket 
                                 {room.created_at && (
                                     <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-slate-200 dark:border-slate-800/50">
                                         Group created by{' '}
-                                        <span className="text-slate-700 dark:text-slate-400 font-bold">
-                                            {Number(room.created_by) === Number(currentUser?.id) ? 'You' : (room.creator_name || 'an unknown user')}
+                                        <span className="text-slate-700 dark:text-slate-400 font-bold flex items-center gap-1 inline-flex align-bottom">
+                                            {Number(room.created_by) === Number(currentUser?.id) ? 'You' : (renderTextWithEmojis(room.creator_name) || 'an unknown user')}
                                         </span>
                                         , on {new Date(room.created_at).toLocaleString(undefined, {
                                             day: '2-digit', month: '2-digit', year: 'numeric',

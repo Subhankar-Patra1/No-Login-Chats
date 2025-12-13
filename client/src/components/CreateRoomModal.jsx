@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
 export default function CreateRoomModal({ onClose, onCreate }) {
     const { token } = useAuth();
@@ -151,7 +152,7 @@ export default function CreateRoomModal({ onClose, onCreate }) {
                                                     </div>
                                                 )}
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{user.display_name}</p>
+                                                    <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{renderTextWithEmojis(user.display_name)}</p>
                                                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                                         {user.username.startsWith('@') ? user.username : `@${user.username}`}
                                                     </p>
@@ -177,7 +178,7 @@ export default function CreateRoomModal({ onClose, onCreate }) {
                                             </div>
                                         )}
                                         <div>
-                                            <p className="text-sm font-medium text-slate-800 dark:text-white">{selectedUser.display_name}</p>
+                                            <p className="text-sm font-medium text-slate-800 dark:text-white">{renderTextWithEmojis(selectedUser.display_name)}</p>
                                             <p className="text-xs text-slate-500 dark:text-slate-400">
                                                 {selectedUser.username.startsWith('@') ? selectedUser.username : `@${selectedUser.username}`}
                                             </p>

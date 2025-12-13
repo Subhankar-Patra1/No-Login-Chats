@@ -134,14 +134,38 @@ export default function Dashboard() {
                 audio.play().catch(e => console.log("Audio play error:", e));
             }
 
-            setRooms(prev => prev.map(r => {
-                if (r.id === msg.room_id) {
-                    if (activeRoomRef.current?.id !== r.id) {
-                        return { ...r, unread_count: (r.unread_count || 0) + 1 };
-                    }
+            setRooms(prev => {
+                let updatedRooms = [...prev];
+                const roomIndex = updatedRooms.findIndex(r => r.id === msg.room_id);
+                
+                // [NEW] Emit delivered globally if received (e.g. in sidebar)
+                // We check if it's not our own message to avoid self-ack
+                if (String(msg.user_id) !== String(user.id)) {
+                    // We can emit 'message_delivered' here. 
+                    // Server handles idempotency so safe if ChatWindow also emits it.
+                    console.log('[DEBUG-CLIENT] Emitting global message_delivered for msg:', msg.id);
+                    newSocket.emit('message_delivered', { messageId: msg.id, roomId: msg.room_id });
                 }
-                return r;
-            }));
+
+                if (roomIndex > -1) {
+                     const room = { ...updatedRooms[roomIndex] };
+                     // Update unread count if not active
+                     if (activeRoomRef.current?.id !== room.id) {
+                         room.unread_count = (room.unread_count || 0) + 1;
+                     }
+                     // Update last message preview
+                     room.last_message_content = msg.content;
+                     room.last_message_type = msg.type;
+                     room.last_message_sender_id = msg.user_id;
+                     room.last_message_status = msg.status || 'sent'; // Default to sent if missing
+                     room.last_message_id = msg.id;
+
+                     // Remove and unshift to top
+                     updatedRooms.splice(roomIndex, 1);
+                     updatedRooms.unshift(room);
+                }
+                return updatedRooms;
+            });
         });
 
         // [NEW] Avatar Updates
@@ -179,10 +203,30 @@ export default function Dashboard() {
         });
 
         // [NEW] Chat cleared/deleted events
+        newSocket.on('messages_status_update', ({ roomId, messageIds, status }) => {
+            setRooms(prev => prev.map(r => {
+                if (String(r.id) === String(roomId) && r.last_message_id && messageIds.map(String).includes(String(r.last_message_id))) {
+                    return { ...r, last_message_status: status };
+                }
+                return r;
+            }));
+        });
+
         newSocket.on('chat:cleared', ({ roomId }) => {
             // Update rooms list
              setRooms(prev => prev.map(r => 
-                String(r.id) === String(roomId) ? { ...r, unread_count: 0, initialMessages: [] } : r
+                String(r.id) === String(roomId) ? { 
+                    ...r, 
+                    unread_count: 0, 
+                    initialMessages: [],
+                    last_message_content: null,
+                    last_message_type: null,
+                    last_message_sender_id: null,
+                    last_message_type: null,
+                    last_message_sender_id: null,
+                    last_message_status: null,
+                    last_message_id: null
+                } : r
             ));
             
             // Update active room if matches

@@ -555,6 +555,78 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
 
 
+    // Search State
+    const [showSearch, setShowSearch] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchMatches, setSearchMatches] = useState([]);
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+    const searchInputRef = useRef(null);
+
+    // Close search when room changes
+    useEffect(() => {
+        setShowSearch(false);
+        setSearchTerm('');
+        setSearchMatches([]);
+        setCurrentMatchIndex(-1);
+    }, [room.id]);
+
+    useEffect(() => {
+        if (showSearch && searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, [showSearch]);
+
+    const handleSearch = (term) => {
+        setSearchTerm(term);
+        if (!term.trim()) {
+            setSearchMatches([]);
+            setCurrentMatchIndex(-1);
+            return;
+        }
+
+        const lowerTerm = term.toLowerCase();
+        // Find all message IDs that match. Filter system messages? Maybe include them.
+        const matches = messages
+            .filter(m => m.content && typeof m.content === 'string' && m.content.toLowerCase().includes(lowerTerm))
+            .map(m => m.id);
+        
+        setSearchMatches(matches);
+        if (matches.length > 0) {
+            setCurrentMatchIndex(matches.length - 1); // Start at most recent? Or first? usually "Down" goes to next. Let's start at the bottom (newest) or top? Standard is "Find Next".
+            // Let's scroll to the *last* match (most recent) typically for chat?
+            // Actually, "Find" usually jumps to the first match in viewport or first match overall.
+            // Let's default to the *most recent* match (bottom-most) because that's where user usually is.
+            scrollToMatch(matches[matches.length - 1]);
+        } else {
+            setCurrentMatchIndex(-1);
+        }
+    };
+
+    const scrollToMatch = (msgId) => {
+        const el = document.getElementById(`msg-${msgId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('reply-highlight'); // Re-use the highlight class
+            setTimeout(() => el.classList.remove('reply-highlight'), 2000);
+        }
+    };
+
+    const nextMatch = () => {
+        if (searchMatches.length === 0) return;
+        let newIndex = currentMatchIndex - 1; // Go "Up" (older)
+        if (newIndex < 0) newIndex = searchMatches.length - 1; // Wrap to bottom
+        setCurrentMatchIndex(newIndex);
+        scrollToMatch(searchMatches[newIndex]);
+    };
+
+    const prevMatch = () => {
+        if (searchMatches.length === 0) return;
+        let newIndex = currentMatchIndex + 1; // Go "Down" (newer)
+        if (newIndex >= searchMatches.length) newIndex = 0; // Wrap to top
+        setCurrentMatchIndex(newIndex);
+        scrollToMatch(searchMatches[newIndex]);
+    };
+
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 relative overflow-hidden transition-colors">
             {/* ... (Modal and Background remain same, but easier to just wrap MessageList) */}
@@ -570,81 +642,166 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-violet-200/40 via-gray-50 to-gray-50 dark:from-violet-900/20 dark:via-slate-950 dark:to-slate-950 pointer-events-none transition-colors" />
 
             {/* Header */}
-            <div className="p-4 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md flex items-center gap-4 shadow-sm z-10 transition-colors">
-                <button 
-                    onClick={onBack}
-                    className="p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
-                >
-                    <span className="material-symbols-outlined">arrow_back</span>
-                </button>
+            <div className="border-b border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md flex flex-col shadow-sm z-10 transition-colors">
+                {/* Main Header Row */}
+                <div className="p-4 flex items-center gap-4">
+                    <button 
+                        onClick={onBack}
+                        className="p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+                    >
+                        <span className="material-symbols-outlined">arrow_back</span>
+                    </button>
 
-                <div 
-                    ref={headerRef}
-                    className="flex-1 min-w-0 cursor-pointer flex items-center gap-3" 
-                    onClick={() => {
-                        if (room.type === 'direct') setShowProfileCard(!showProfileCard);
-                        else setShowGroupInfo(true);
-                    }}
-                >
-                    {/* Header Avatar */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg shrink-0 overflow-hidden ${!room.avatar_url && !room.avatar_thumb_url ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-200 dark:bg-slate-800'}`}>
-                        {(room.avatar_url || room.avatar_thumb_url) ? (
-                            <img src={room.avatar_url || room.avatar_thumb_url} alt={room.name} className="w-full h-full object-cover" />
-                        ) : (
-                            room.type === 'direct' 
-                                ? room.display_name?.[0]?.toUpperCase() || room.name?.[0]?.toUpperCase()
-                                : '#'
-                        )}
-                    </div>
-
-                    <div className="min-w-0">
-                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate transition-colors duration-300">
-                            {room.type === 'group' && (
-                                <span className="material-symbols-outlined text-violet-500 dark:text-violet-400 shrink-0">tag</span>
+                    <div 
+                        ref={headerRef}
+                        className="flex-1 min-w-0 cursor-pointer flex items-center gap-3" 
+                        onClick={() => {
+                            if (room.type === 'direct') setShowProfileCard(!showProfileCard);
+                            else setShowGroupInfo(true);
+                        }}
+                    >
+                        {/* Header Avatar */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg shrink-0 overflow-hidden ${!room.avatar_url && !room.avatar_thumb_url ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-200 dark:bg-slate-800'}`}>
+                            {(room.avatar_url || room.avatar_thumb_url) ? (
+                                <img src={room.avatar_url || room.avatar_thumb_url} alt={room.name} className="w-full h-full object-cover" />
+                            ) : (
+                                room.type === 'direct' 
+                                    ? room.display_name?.[0]?.toUpperCase() || room.name?.[0]?.toUpperCase()
+                                    : '#'
                             )}
-                            <span className="truncate">{linkifyText(room.name)}</span>
-                            {room.type === 'group' && (
-                                <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-slate-500 dark:text-slate-400 font-mono border border-slate-200 dark:border-slate-700 ml-2 shrink-0 transition-colors duration-300">
-                                    {room.code}
+                        </div>
+
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 truncate transition-colors duration-300">
+                                {room.type === 'group' && (
+                                    <span className="material-symbols-outlined text-violet-500 dark:text-violet-400 shrink-0">tag</span>
+                                )}
+                                <span className="truncate">{linkifyText(room.name)}</span>
+                                {room.type === 'group' && (
+                                    <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-slate-500 dark:text-slate-400 font-mono border border-slate-200 dark:border-slate-700 ml-2 shrink-0 transition-colors duration-300">
+                                        {room.code}
+                                    </span>
+                                )}
+                            </h2>
+                            {room.type === 'direct' && room.username && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate transition-colors duration-300">
+                                    {room.username.startsWith('@') ? room.username : `@${room.username}`}
+                                </p>
+                            )}
+                            
+                            {room.type === 'direct' && otherUserStatus && (
+                                <div className="text-xs font-medium mt-0.5">
+                                    {otherUserStatus.online ? (
+                                        <span className="text-green-500 dark:text-green-400">Online now</span>
+                                    ) : otherUserStatus.last_seen ? (
+                                        <span className="text-slate-400 dark:text-slate-500">Last seen {timeAgo(otherUserStatus.last_seen)}</span>
+                                    ) : (
+                                        <span className="text-slate-400 dark:text-slate-600">Offline</span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {room.expires_at && (
+                            <p className={`text-xs mt-0.5 flex items-center gap-1 ${isExpired ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
+                                <span className="material-symbols-outlined text-[14px]">
+                                    {isExpired ? 'timer_off' : 'timer'}
                                 </span>
-                            )}
-                        </h2>
-                        {room.type === 'direct' && room.username && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate transition-colors duration-300">
-                                {room.username.startsWith('@') ? room.username : `@${room.username}`}
+                                {isExpired ? 'Expired' : `Expires: ${new Date(room.expires_at).toLocaleString()}`}
                             </p>
                         )}
+                    </div>
                         
-                        {room.type === 'direct' && otherUserStatus && (
-                            <div className="text-xs font-medium mt-0.5">
-                                {otherUserStatus.online ? (
-                                    <span className="text-green-500 dark:text-green-400">Online now</span>
-                                ) : otherUserStatus.last_seen ? (
-                                    <span className="text-slate-400 dark:text-slate-500">Last seen {timeAgo(otherUserStatus.last_seen)}</span>
-                                ) : (
-                                    <span className="text-slate-400 dark:text-slate-600">Offline</span>
-                                )}
-                            </div>
+                    <div className="flex items-center gap-1">
+                        <button 
+                            onClick={() => setShowSearch(!showSearch)}
+                            className={`p-2 transition-all rounded-full ${showSearch ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                            title="Search in chat"
+                        >
+                            <span className="material-symbols-outlined">search</span>
+                        </button>
+                        {room.type === 'group' && (
+                            <button 
+                                onClick={() => setShowGroupInfo(true)}
+                                className="p-2 text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-all rounded-full"
+                            >
+                                <span className="material-symbols-outlined">info</span>
+                            </button>
                         )}
                     </div>
-
-                    {room.expires_at && (
-                        <p className={`text-xs mt-0.5 flex items-center gap-1 ${isExpired ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                            <span className="material-symbols-outlined text-[14px]">
-                                {isExpired ? 'timer_off' : 'timer'}
-                            </span>
-                            {isExpired ? 'Expired' : `Expires: ${new Date(room.expires_at).toLocaleString()}`}
-                        </p>
-                    )}
                 </div>
 
-                {room.type === 'group' && (
-                    <button 
-                        onClick={() => setShowGroupInfo(true)}
-                        className="p-2 text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-all"
-                    >
-                        <span className="material-symbols-outlined">info</span>
-                    </button>
+                {/* Search Bar Row */}
+                {showSearch && (
+                    <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                         {/* Design match: Dark bg (in dark mode), Blue border, Rounded */}
+                         <div className="flex items-center bg-white dark:bg-[#0f1117] border border-sky-500 dark:border-sky-500 rounded-lg px-3 py-1.5 shadow-sm transition-all">
+                             <span className="material-symbols-outlined text-slate-400 text-[20px] select-none">search</span>
+                             <div className="flex-1 relative mx-2">
+                                 <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => handleSearch(e.target.value)}
+                                    placeholder="Search"
+                                    className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 focus:outline-none shadow-none text-slate-700 dark:text-slate-200 placeholder-slate-400"
+                                    style={{ boxShadow: 'none' }} // Force no shadow/outline
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            if (e.shiftKey) prevMatch();
+                                            else nextMatch();
+                                        }
+                                        if (e.key === 'Escape') {
+                                            setShowSearch(false);
+                                            setSearchTerm('');
+                                            setSearchMatches([]);
+                                        }
+                                    }}
+                                 />
+                             </div>
+                             
+                             <div className="flex items-center gap-1">
+                                 {searchMatches.length > 0 && (
+                                     <span className="text-xs text-slate-400 font-mono mr-2 select-none">
+                                         {currentMatchIndex + 1}/{searchMatches.length}
+                                     </span>
+                                 )}
+                                 
+                                 {/* Up Arrow */}
+                                 <button 
+                                    onClick={nextMatch}
+                                    disabled={searchMatches.length === 0}
+                                    className="p-1 text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 disabled:opacity-30 transition-colors flex items-center justify-center"
+                                    title="Previous match (Shift+Enter)" 
+                                 >
+                                     <span className="material-symbols-outlined text-[20px]">keyboard_arrow_up</span>
+                                 </button>
+
+                                 {/* Down Arrow */}
+                                 <button 
+                                    onClick={prevMatch}
+                                    disabled={searchMatches.length === 0}
+                                    className="p-1 text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 disabled:opacity-30 transition-colors flex items-center justify-center"
+                                    title="Next match (Enter)"
+                                 >
+                                     <span className="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+                                 </button>
+                                 
+                                 {/* Close (X in circle) */}
+                                 <button 
+                                    onClick={() => {
+                                        setShowSearch(false);
+                                        setSearchTerm('');
+                                        setSearchMatches([]);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 ml-1 transition-colors flex items-center justify-center"
+                                    title="Close"
+                                 >
+                                     <span className="material-symbols-outlined text-[20px]">cancel</span>
+                                 </button>
+                             </div>
+                         </div>
+                    </div>
                 )}
             </div>
 
@@ -664,6 +821,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     onDelete={handleLocalDelete}
                     onRetry={handleRetryAudio} 
                     onEdit={setEditingMessage}
+                    searchTerm={searchTerm} // [NEW] Pass search term
                 />
             )}
             

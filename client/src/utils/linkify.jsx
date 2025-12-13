@@ -20,7 +20,7 @@ export const textToHtml = (text) => {
 };
 
 // Main function to linkify text and render emojis
-export const linkifyText = (text) => {
+export const linkifyText = (text, searchTerm = '') => {
     if (!text) return null;
 
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
@@ -28,6 +28,22 @@ export const linkifyText = (text) => {
     let lastIndex = 0;
     let match;
     let globalKey = 0;
+
+    // Helper to highlight text if searchTerm exists
+    const highlightText = (content) => {
+        if (!content) return null;
+        if (!searchTerm || !searchTerm.trim()) return content;
+
+        const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        const theseParts = content.split(regex);
+        
+        return theseParts.map((part, i) => {
+            if (part.toLowerCase() === searchTerm.toLowerCase()) {
+                return <mark key={`hl-${globalKey++}`} className="bg-yellow-200 dark:bg-yellow-500/30 text-slate-900 dark:text-white rounded-sm px-0.5">{part}</mark>;
+            }
+            return part;
+        });
+    };
 
     // Inner helper to process text segments for emojis
     const processTextSegment = (segment) => {
@@ -41,7 +57,14 @@ export const linkifyText = (text) => {
             const index = emojiMatch.index;
 
             if (index > lastEmojiIndex) {
-               parts.push(<span key={globalKey++}>{segment.substring(lastEmojiIndex, index)}</span>);
+               // Apply (optional) highlighting to text between emojis
+               const sub = segment.substring(lastEmojiIndex, index);
+               const highlighted = highlightText(sub);
+               if (Array.isArray(highlighted)) {
+                   highlighted.forEach(h => parts.push(<span key={globalKey++}>{h}</span>));
+               } else {
+                   parts.push(<span key={globalKey++}>{highlighted}</span>);
+               }
             }
 
             const hex = toHex(emojiChar);
@@ -68,7 +91,13 @@ export const linkifyText = (text) => {
         }
 
         if (lastEmojiIndex < segment.length) {
-            parts.push(<span key={globalKey++}>{segment.substring(lastEmojiIndex)}</span>);
+            const sub = segment.substring(lastEmojiIndex);
+            const highlighted = highlightText(sub);
+            if (Array.isArray(highlighted)) {
+                highlighted.forEach(h => parts.push(<span key={globalKey++}>{h}</span>));
+            } else {
+                parts.push(<span key={globalKey++}>{highlighted}</span>);
+            }
         }
     };
 

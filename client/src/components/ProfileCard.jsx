@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePresence } from '../context/PresenceContext';
 import StatusDot from './StatusDot';
 import AvatarEditorModal from './AvatarEditorModal';
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
 const timeAgo = (dateString) => {
     if (!dateString) return '';
@@ -105,7 +106,9 @@ export default function ProfileCard({ targetUser, onClose, anchorRef }) {
                             )}
                         </div>
                         
-                        <h3 className="text-xl font-bold text-white">{displayedUser.display_name}</h3>
+                        <h3 className="text-xl font-bold text-white max-w-full text-center flex items-center justify-center gap-1">
+                            {renderTextWithEmojis(displayedUser.display_name)}
+                        </h3>
                         <p className="text-slate-400 text-sm mb-4">
                             {displayedUser.username?.startsWith('@') ? displayedUser.username : `@${displayedUser.username}`}
                         </p>

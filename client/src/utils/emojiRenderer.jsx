@@ -3,7 +3,8 @@
 
 // Regex to match emojis (simplified version, might need a more robust one)
 // Using a broad range for emojis
-const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F191}-\u{1F251}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F171}]|[\u{1F18E}]|[\u{1F191}-\u{1F19A}]/gu;
+// Regex to match emojis including flags (RI pairs) and ZWJ sequences
+const emojiRegex = /[\u{1F1E6}-\u{1F1FF}]{2}|(?:[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F191}-\u{1F251}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F171}]|[\u{1F18E}]|[\u{1F191}-\u{1F19A}])(?:\u{200D}(?:[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F191}-\u{1F251}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F171}]|[\u{1F18E}]|[\u{1F191}-\u{1F19A}]))*/gu;
 
 // Mapping or function to get image URL
 export const getAppleEmojiUrl = (emojiChar) => {
