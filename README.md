@@ -7,12 +7,13 @@
 ## 🚀 Features
 
 - **🔒 Truly Anonymous**: No emails, no phone numbers, no passwords. Identity is session-based.
+- **🤖 Sparkle AI**: Integrated context-aware AI assistant (powered by Gemini) for coding help, general knowledge, and conversational support. Includes persistent history and code block formatting.
 - **⚡ Real-Time Messaging**: Instant delivery using Socket.IO.
 - **⏲️ Ephemeral Groups**: Group chat rooms automatically expire and delete after 48 hours.
 - **👥 Direct Messaging**: Private one-on-one chats with other users.
 - **🔗 Smart Invites**: Share rooms via unique codes or direct links (QR codes included!).
 - **� Enhanced Chat Actions**: Reply to messages (with preview), copy text, and delete messages (for yourself or everyone).
-- **📝 Rich Text Support**: Preserves code blocks, indentation, and newlines exactly as typed.
+- **📝 Rich Text & Code**: Markdown support with syntax highlighting for code blocks and copy-to-clipboard functionality.
 - **�📱 Fully Responsive**: a beautiful, mobile-first interface built with TailwindCSS.
 - **🛡️ Secure**: JWT-based authentication and PostgreSQL persistence.
 - **🎤 Voice Notes**: Record and send audio messages with waveform previews.
