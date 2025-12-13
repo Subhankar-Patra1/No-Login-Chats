@@ -11,6 +11,8 @@ import io from 'socket.io-client';
 import { PresenceProvider } from '../context/PresenceContext';
 
 import { AiChatProvider } from '../context/AiChatContext';
+import notificationSound from '../assets/notification.ogg';
+import sentSound from '../assets/sent.ogg';
 
 export default function Dashboard() {
     const { user, token, logout } = useAuth();
@@ -114,6 +116,16 @@ export default function Dashboard() {
         });
 
         newSocket.on('new_message', (msg) => {
+            // [NEW] Play notification sound
+            if (msg.user_id !== user.id) {
+                const audio = new Audio(notificationSound);
+                audio.play().catch(e => console.log("Audio play error:", e));
+            } else {
+                // [NEW] Play sent sound
+                const audio = new Audio(sentSound);
+                audio.play().catch(e => console.log("Audio play error:", e));
+            }
+
             setRooms(prev => prev.map(r => {
                 if (r.id === msg.room_id) {
                     if (activeRoomRef.current?.id !== r.id) {
