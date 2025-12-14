@@ -16,18 +16,18 @@ function WelcomeView({ onPromptClick }) {
     ];
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-fuchsia-100 to-purple-100 dark:from-fuchsia-900/20 dark:to-purple-900/20 flex items-center justify-center mb-6 shadow-xl shadow-fuchsia-500/10">
+        <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto min-h-0 w-full">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-fuchsia-100 to-purple-100 dark:from-fuchsia-900/20 dark:to-purple-900/20 flex items-center justify-center mb-6 shadow-xl shadow-fuchsia-500/10 shrink-0">
                 <SparkleLogo className="w-12 h-12" />
             </div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 mb-3 text-center">
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 mb-3 text-center shrink-0">
                 Welcome to Sparkle AI
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 leading-relaxed">
+            <p className="text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 leading-relaxed shrink-0">
                 I'm your personal AI assistant. Ask me anything, or pick a suggestion below to get started!
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg shrink-0">
                 {suggested.map((text, i) => (
                     <button
                         key={i}
@@ -226,7 +226,7 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-fuchsia-100/40 via-slate-50 to-slate-50 dark:from-fuchsia-900/10 dark:via-slate-950 dark:to-slate-950 pointer-events-none transition-colors" />
 
             {/* AI Header */}
-             <div className="p-4 border-b border-fuchsia-100 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md flex items-center gap-4 shadow-sm z-10 transition-colors">
+             <div className="p-4 border-b border-fuchsia-100 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md flex items-center gap-4 shadow-sm z-10 transition-colors shrink-0">
                 <button 
                     onClick={onBack}
                     className="p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
@@ -307,17 +307,19 @@ export default function AIChatWindow({ socket, room, user, onBack, isLoading }) 
             )}
 
             {/* Input - Reusing MessageInput but simplified for AI if needed */}
-            <MessageInput 
-                onSend={(content) => handleSend(content, replyTo)} 
-                onSendAudio={() => alert("Voice for AI coming soon!")} 
-                onSendGif={() => alert("GIFs for AI coming soon!")}
-                disabled={isAiThinking || (!!currentAiOp && currentAiOp.isStreaming !== false)} // Still disabled for text input, but we'll use isGenerating for button
-                isGenerating={!!currentAiOp && currentAiOp.isStreaming !== false} // [NEW] Flag for checking if generating
-                onStop={handleCancelAi}       // [NEW] Stop handler
-                replyTo={replyTo}          
-                setReplyTo={setReplyTo}
-                isAi={true}
-            />
+            <div className="shrink-0 z-20">
+                <MessageInput 
+                    onSend={(content) => handleSend(content, replyTo)} 
+                    onSendAudio={() => alert("Voice for AI coming soon!")} 
+                    onSendGif={() => alert("GIFs for AI coming soon!")}
+                    disabled={isAiThinking || (!!currentAiOp && currentAiOp.isStreaming !== false)} // Still disabled for text input, but we'll use isGenerating for button
+                    isGenerating={!!currentAiOp && currentAiOp.isStreaming !== false} // [NEW] Flag for checking if generating
+                    onStop={handleCancelAi}       // [NEW] Stop handler
+                    replyTo={replyTo}          
+                    setReplyTo={setReplyTo}
+                    isAi={true}
+                />
+            </div>
         </div>
     );
 }
