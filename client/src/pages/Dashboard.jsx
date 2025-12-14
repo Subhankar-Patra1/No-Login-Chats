@@ -541,8 +541,9 @@ export default function Dashboard() {
                 className={`
                     ${activeRoom ? 'hidden md:flex' : 'flex'} 
                     h-full z-10 shrink-0
+                    w-full md:w-[var(--sidebar-width)]
                 `}
-                style={{ width: window.innerWidth >= 768 ? sidebarWidth : '100%' }}
+                style={{ '--sidebar-width': `${sidebarWidth}px` }}
             >
                 <Sidebar 
                     rooms={rooms} 
