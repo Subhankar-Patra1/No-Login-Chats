@@ -62,7 +62,6 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
              VALUES ($1, $2, 'audio', $3, $4, $5, 'Voice message', $6) 
              RETURNING id, status, created_at`,
             [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null]
-            [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null]
         );
         
         // [NEW] Update Room Last Message At
