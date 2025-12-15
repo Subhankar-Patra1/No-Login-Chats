@@ -363,7 +363,12 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                             </span>
                                         )}
                                         <span className="truncate flex-1">
-                                            {room.last_message_type === 'image' ? 'Sent an image' :
+                                            {room.last_message_type === 'image' ? (
+                                                <span className="flex items-center gap-1">
+                                                    <span className="material-symbols-outlined text-[18px] translate-y-[0.5px]">image</span>
+                                                    <span className="truncate">{room.last_message_caption ? renderTextWithEmojis(room.last_message_caption) : 'Photo'}</span>
+                                                </span>
+                                            ) :
                                              room.last_message_type === 'audio' ? 'Sent an audio' :
                                              room.last_message_type === 'gif' ? 'Sent a GIF' :
                                              renderPreview(room.last_message_content)}

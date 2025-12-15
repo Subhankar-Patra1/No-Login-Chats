@@ -271,7 +271,7 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
     if (!file) return null;
 
     return (
-        <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center animate-in fade-in duration-200">
+        <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-50 flex flex-col items-center animate-in fade-in duration-200">
             <style>{`
                 /* Custom styles for ReactCrop to match WhatsApp look */
                 .ReactCrop__crop-selection {
@@ -291,20 +291,20 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={handleClose}
-                        className="p-2 -ml-2 rounded-full hover:bg-white/10 text-white transition-colors"
+                        className="p-2 -ml-2 rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     {recipientAvatar ? (
-                        <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
                             <img src={recipientAvatar} alt={recipientName} className="w-full h-full object-cover" />
                         </div>
                     ) : (
-                        <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-white/10">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700">
                             {recipientName?.charAt(0) || '?'}
                         </div>
                     )}
-                    <span className="text-white font-medium text-lg drop-shadow-md">{recipientName}</span>
+                    <span className="text-slate-800 dark:text-white font-medium text-lg drop-shadow-sm">{recipientName}</span>
                 </div>
 
                 {/* TOOLS */}
@@ -312,7 +312,7 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                     {(isFlipped || isRotated || completedCrop) && (
                         <button 
                             onClick={handleUndo} 
-                            className="w-10 h-10 flex items-center justify-center text-slate-300 hover:bg-slate-800 hover:text-white rounded-full transition-all active:scale-95"
+                            className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white rounded-full transition-all active:scale-95"
                             title="Undo Changes"
                         >
                             <span className="material-symbols-outlined">undo</span>
@@ -323,7 +323,7 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                     {(isCropping || isFlipped) && (
                         <button 
                             onClick={handleDone} 
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-full text-sm font-medium transition-all active:scale-95 shadow-lg"
+                            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white rounded-full text-sm font-medium transition-all active:scale-95 shadow-lg"
                             title="Done"
                         >
                             Done
@@ -332,21 +332,21 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
 
                     <button 
                         onClick={toggleCrop} 
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isCropping ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isCropping ? 'bg-indigo-100 text-indigo-600 dark:bg-slate-700 dark:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}`}
                         title="Crop"
                     >
                         <span className="material-symbols-outlined">crop</span>
                     </button>
                     <button 
                         onClick={handleRotate} 
-                        className="w-10 h-10 flex items-center justify-center text-slate-300 hover:bg-slate-800 hover:text-white rounded-full transition-all active:scale-95"
+                        className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white rounded-full transition-all active:scale-95"
                         title="Rotate"
                     >
                         <span className="material-symbols-outlined">rotate_right</span>
                     </button>
                     <button 
                         onClick={toggleFlip} 
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isFlipped ? 'text-violet-400 hover:bg-slate-800' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isFlipped ? 'text-violet-600 bg-violet-50 dark:bg-transparent dark:text-violet-400' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}`}
                         title="Flip Horizontal"
                     >
                         <span className="material-symbols-outlined">flip</span>
@@ -408,9 +408,9 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
 
 
             {/* CAPTION BAR */}
-            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-12 pb-6 px-4 z-50">
+            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white/80 to-transparent dark:from-slate-900 dark:via-slate-900/80 pt-12 pb-6 px-4 z-50">
                 <div className="max-w-3xl mx-auto flex items-end gap-3">
-                    <div className="flex-1 bg-slate-800/90 backdrop-blur-md rounded-2xl flex items-center border border-white/10 focus-within:border-violet-500/50 transition-colors shadow-lg relative min-h-[50px]">
+                    <div className="flex-1 bg-slate-100 dark:bg-slate-800/90 backdrop-blur-md rounded-2xl flex items-center border border-slate-200 dark:border-white/10 focus-within:border-violet-500/50 transition-colors shadow-lg relative min-h-[50px]">
                         <button 
                             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                             className={`pl-3 pr-2 py-3 h-full flex items-center justify-center text-slate-400 hover:text-yellow-400 transition-colors ${showEmojiPicker ? 'text-yellow-400' : ''}`}
@@ -461,11 +461,11 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                                         handleSendClick();
                                     }
                                 }}
-                                className="w-full bg-transparent text-white border-0 focus:ring-0 outline-none focus:outline-none py-3 pr-4 pl-2 placeholder:text-slate-400 self-center max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words custom-scrollbar"
+                                className="w-full bg-transparent text-slate-800 dark:text-white border-0 focus:ring-0 outline-none focus:outline-none py-3 pr-4 pl-2 placeholder:text-slate-500 dark:placeholder:text-slate-400 self-center max-h-[100px] overflow-y-auto whitespace-pre-wrap break-words custom-scrollbar"
                                 tagName="div"
                             />
                             {!(html.replace(/<[^>]*>/g, '').trim().length > 0 || html.includes('<img')) && (
-                                <div className="absolute left-2 top-0 h-full flex items-center pointer-events-none text-slate-400 select-none">
+                                <div className="absolute left-2 top-0 h-full flex items-center pointer-events-none text-slate-500 dark:text-slate-400 select-none">
                                     Add a caption...
                                 </div>
                             )}

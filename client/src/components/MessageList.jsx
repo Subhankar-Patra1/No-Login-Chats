@@ -394,6 +394,9 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                 {msg.caption && (
                                     <p className="text-sm mt-1 mb-1 whitespace-pre-wrap break-words px-1">
                                         {linkifyText(msg.caption, searchTerm)}
+                                        {msg.edited_at && (
+                                            <span className="text-[10px] opacity-60 ml-1">(edited)</span>
+                                        )}
                                     </p>
                                 )}
                             </div>

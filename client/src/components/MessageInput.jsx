@@ -729,22 +729,26 @@ export default function MessageInput({
                                     <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
                                 </button>
                                 
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
-                                    title="Attach Image"
-                                    disabled={disabled || isAi} // Disable for AI for now if requested? Prompt says "supports WhatsApp-grade image messaging". Usually AI supports images too, but let's allow it unless explicitly blocked. Prompt doesn't block. Wait, 'isAi' comes from prop. If AI chat, maybe we support multimodal later. For now let's allow it or check constraints. Prompt: "Works for Direct + Group chats". Didn't explicitly mention AI. I'll enable it.
-                                >
-                                    <span className="material-symbols-outlined text-[20px]">image</span>
-                                </button>
-                                <input 
-                                    type="file" 
-                                    ref={fileInputRef} 
-                                    accept="image/*" 
-                                    className="hidden" 
-                                    onChange={handleImageChange} 
-                                />
+                                {!isAi && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
+                                            title="Attach Image"
+                                            disabled={disabled}
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">image</span>
+                                        </button>
+                                        <input 
+                                            type="file" 
+                                            ref={fileInputRef} 
+                                            accept="image/*" 
+                                            className="hidden" 
+                                            onChange={handleImageChange} 
+                                        />
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

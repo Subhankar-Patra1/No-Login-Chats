@@ -392,6 +392,7 @@ router.get('/', async (req, res) => {
             (SELECT user_id FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_sender_id,
             (SELECT id FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_id,
             (SELECT status FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_status,
+            (SELECT caption FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_caption,
             gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members
             FROM rooms r 
             JOIN room_members rm ON r.id = rm.room_id 

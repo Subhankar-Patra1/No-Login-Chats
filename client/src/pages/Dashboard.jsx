@@ -142,7 +142,7 @@ export default function Dashboard() {
 
             setRooms(prev => {
                 let updatedRooms = [...prev];
-                const roomIndex = updatedRooms.findIndex(r => r.id === msg.room_id);
+                const roomIndex = updatedRooms.findIndex(r => String(r.id) === String(msg.room_id));
                 
                 // [NEW] Emit delivered globally if received (e.g. in sidebar)
                 // We check if it's not our own message to avoid self-ack
@@ -165,6 +165,7 @@ export default function Dashboard() {
                      room.last_message_sender_id = msg.user_id;
                      room.last_message_status = msg.status || 'sent'; // Default to sent if missing
                      room.last_message_id = msg.id;
+                     room.last_message_caption = msg.caption;
 
                      // Remove and unshift to top
                      updatedRooms.splice(roomIndex, 1);
