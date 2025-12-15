@@ -256,9 +256,9 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         };
 
         const handleStatusUpdate = ({ messageIds, status, roomId }) => {
-            if (roomId === room.id) {
+            if (String(roomId) === String(room.id)) {
                 setMessages(prev => prev.map(msg => 
-                    messageIds.includes(msg.id) ? { ...msg, status } : msg
+                    messageIds.some(id => String(id) === String(msg.id)) ? { ...msg, status } : msg
                 ));
             }
         };
@@ -463,7 +463,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     };
 
-    const handleRetryAudio = async (msg) => {
+    const handleRetry = async (msg) => {
         if (!msg.localBlob) return;
         
         setMessages(prev => prev.map(m => 
@@ -471,20 +471,37 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         ));
 
         const formData = new FormData();
-        formData.append('audio', msg.localBlob);
         formData.append('roomId', room.id);
-        formData.append('durationMs', msg.audio_duration_ms);
-        formData.append('waveform', JSON.stringify(msg.audio_waveform));
         if (msg.replyTo) formData.append('replyToMessageId', msg.replyTo.id);
         formData.append('tempId', msg.id);
 
-        try {
-            await uploadAudioWithProgress(formData, msg.id);
-        } catch (err) {
-            console.error(err);
-            setMessages(prev => prev.map(m => 
-                m.id === msg.id ? { ...m, uploadStatus: 'failed', status: 'error' } : m
-            ));
+        if (msg.type === 'audio') {
+            formData.append('audio', msg.localBlob);
+            formData.append('durationMs', msg.audio_duration_ms);
+            formData.append('waveform', JSON.stringify(msg.audio_waveform));
+            
+            try {
+                await uploadAudioWithProgress(formData, msg.id);
+            } catch (err) {
+                console.error(err);
+                setMessages(prev => prev.map(m => 
+                    m.id === msg.id ? { ...m, uploadStatus: 'failed', status: 'error' } : m
+                ));
+            }
+        } else if (msg.type === 'image') {
+            formData.append('image', msg.localBlob);
+            formData.append('caption', msg.caption || '');
+            if (msg.image_width) formData.append('width', msg.image_width);
+            if (msg.image_height) formData.append('height', msg.image_height);
+
+            try {
+                await uploadImageWithProgress(formData, msg.id);
+            } catch (err) {
+                 console.error(err);
+                 setMessages(prev => prev.map(m =>
+                    m.id === msg.id ? { ...m, status: 'error' } : m
+                ));
+            }
         }
     };
 
@@ -933,7 +950,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     socket={socket} 
                     onReply={setReplyTo} 
                     onDelete={handleLocalDelete}
-                    onRetry={handleRetryAudio} 
+                    onRetry={handleRetry} 
                     onEdit={setEditingMessage}
                     searchTerm={searchTerm} // [NEW] Pass search term
                 />

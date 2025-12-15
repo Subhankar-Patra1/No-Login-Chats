@@ -353,7 +353,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
                                 ) : (
                                     <div className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
-                                        {room.last_message_sender_id === user.id && (
+                                        {room.last_message_sender_id === user.id && room.type !== 'ai' && (
                                             <span className={`material-symbols-outlined text-[16px] ${
                                                 room.last_message_status === 'seen' ? 'text-blue-500' :
                                                 room.last_message_status === 'delivered' ? 'text-slate-400' :

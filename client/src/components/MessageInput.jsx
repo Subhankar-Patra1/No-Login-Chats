@@ -84,9 +84,9 @@ export default function MessageInput({
     // Populate input when editing
     useEffect(() => {
         if (editingMessage) {
-            // [FIX] Use caption for images
+            // [FIX] Use caption for images and render emojis to HTML
             const initialContent = editingMessage.type === 'image' ? (editingMessage.caption || '') : editingMessage.content;
-            setHtml(initialContent);
+            setHtml(renderTextWithEmojisToHtml(initialContent));
             if (editorRef.current) editorRef.current.focus();
         } else {
             if (!editingMessage && html === editingMessage?.content) {

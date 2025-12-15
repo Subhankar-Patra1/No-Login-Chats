@@ -11,6 +11,7 @@ import 'highlight.js/styles/atom-one-dark.css';
 import 'katex/dist/katex.min.css'; // [NEW]
 import SparkleLogo from './icons/SparkleLogo';
 import { renderTextWithEmojis } from '../utils/emojiRenderer';
+import { formatBytes } from '../utils/formatBytes'; // [NEW]
 import ImageViewerModal from './ImageViewerModal';
 
 const formatDuration = (ms) => {
@@ -86,6 +87,29 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
     const { token, user } = useAuth(); 
     const isAudio = msg.type === 'audio';
     const [imgLoaded, setImgLoaded] = useState(false);
+    const [isDownloaded, setIsDownloaded] = useState(() => {
+        if (isMe) return true;
+        try {
+            const saved = JSON.parse(localStorage.getItem(`downloadedImages_${user?.id}`)) || [];
+            return saved.includes(msg.id);
+        } catch {
+            return false;
+        }
+    });
+
+    const markAsDownloaded = () => {
+        setIsDownloaded(true);
+        try {
+             const key = `downloadedImages_${user?.id}`;
+             const saved = JSON.parse(localStorage.getItem(key)) || [];
+             if (!saved.includes(msg.id)) {
+                 saved.push(msg.id);
+                 localStorage.setItem(key, JSON.stringify(saved));
+             }
+        } catch (e) {
+            console.error("Failed to save download state", e);
+        }
+    };
 
     const toggleMenu = (e) => {
         e.stopPropagation();
@@ -340,7 +364,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     }}
                                 >
                                     <img 
-                                        src={msg.image_url} 
+                                        src={isDownloaded ? msg.image_url : ''} 
                                         alt={msg.caption || "Image"} 
                                         className={`w-full h-full object-cover cursor-pointer transition-opacity duration-300 display-block ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
                                         loading="eager" 
@@ -356,6 +380,46 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                          <div className="absolute inset-0 flex items-center justify-center text-slate-400">
                                              <span className="material-symbols-outlined text-[32px] opacity-20">image</span>
                                          </div>
+                                    )}
+                                    {/* Download Icon Overlay (Receiver only) */}
+                                    {!isMe && (!isDownloaded || !imgLoaded) && (
+                                        <div className="absolute inset-0 flex items-center justify-center z-20 backdrop-blur-md bg-black/30 transition-all duration-300">
+                                            {!isDownloaded ? (
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        markAsDownloaded();
+                                                    }}
+                                                    className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-white border border-white/20 shadow-lg transition-transform active:scale-95 group/btn"
+                                                    title="Download Image"
+                                                >
+                                                    <span className="material-symbols-outlined text-[24px] group-hover/btn:scale-110 transition-transform">download</span>
+                                                </button>
+                                            ) : (
+                                                 <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin shadow-lg"></div>
+                                            )}
+                                            
+                                            {!isDownloaded && (
+                                                <span className="absolute bottom-4 text-xs font-medium text-white/90 drop-shadow-md">
+                                                    {formatBytes(msg.image_size || 0)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Corner Download Icon (for already downloaded images) */}
+                                    {!isMe && isDownloaded && (
+                                        <a 
+                                            href={msg.image_url} 
+                                            download={`image-${msg.id}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()} 
+                                            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition-all duration-200 z-20 backdrop-blur-sm"
+                                            title="Save to Device"
+                                        >
+                                            <span className="material-symbols-outlined text-[18px]">download</span>
+                                        </a>
                                     )}
                                     {msg.status === 'sending' && (
                                         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center transition-all duration-300 z-10">
@@ -435,9 +499,17 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                         )}
                         
                         {isMe && (
-                            <div className="absolute bottom-1 right-3 flex items-center gap-1 text-violet-200/80">
+                            <div className="absolute bottom-1 right-3 flex items-center gap-1 text-violet-200/80 drop-shadow-md">
                                 {msg.status === 'sending' && msg.type !== 'image' && <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>}
-                                {msg.status === 'error' && <span className="material-symbols-outlined text-[14px] text-red-300">error</span>}
+                                {msg.status === 'error' && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onRetry && onRetry(msg); }}
+                                        className="hover:text-red-200 transition-colors"
+                                        title="Retry Upload"
+                                    >
+                                        <span className="material-symbols-outlined text-[14px] text-red-300">refresh</span>
+                                    </button>
+                                )}
                                 {msg.status === 'sent' && <span className="material-symbols-outlined text-[14px]">check</span>}
                                 {msg.status === 'delivered' && <span className="material-symbols-outlined text-[14px] text-slate-300 dark:text-slate-400">done_all</span>}
                                 {msg.status === 'seen' && <span className="material-symbols-outlined text-[14px] text-white font-bold filled">done_all</span>}

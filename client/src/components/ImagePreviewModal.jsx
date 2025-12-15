@@ -4,6 +4,7 @@ import EmojiPicker, { EmojiStyle } from 'emoji-picker-react';
 import ContentEditable from 'react-contenteditable';
 import 'react-image-crop/dist/ReactCrop.css';
 import getCroppedImg from '../utils/cropImage';
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
 export default function ImagePreviewModal({ file, onClose, onSend, recipientName, recipientAvatar }) {
     // Layout State
@@ -304,7 +305,8 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                             {recipientName?.charAt(0) || '?'}
                         </div>
                     )}
-                    <span className="text-slate-800 dark:text-white font-medium text-lg drop-shadow-sm">{recipientName}</span>
+                    <span className="text-slate-800 dark:text-white font-medium text-lg drop-shadow-sm flex items-center gap-1">{renderTextWithEmojis(recipientName)}</span>
+
                 </div>
 
                 {/* TOOLS */}

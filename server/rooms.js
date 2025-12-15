@@ -445,7 +445,7 @@ router.get('/:id/messages', async (req, res) => {
                    m.author_name, m.meta,
                    (aps.heard_at IS NOT NULL) as audio_heard,
                    m.created_at,
-                   m.image_url, m.caption, m.image_width, m.image_height,
+                   m.image_url, m.caption, m.image_width, m.image_height, m.image_size,
                    u.display_name, u.username, u.avatar_thumb_url, u.avatar_url 
             FROM messages m 
             LEFT JOIN users u ON m.user_id = u.id 
