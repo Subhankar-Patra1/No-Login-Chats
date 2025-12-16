@@ -6,65 +6,83 @@ import 'react-image-crop/dist/ReactCrop.css';
 import getCroppedImg from '../utils/cropImage';
 import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
-export default function ImagePreviewModal({ file, onClose, onSend, recipientName, recipientAvatar }) {
-    // Layout State
-    const [previewUrl, setPreviewUrl] = useState(null);
-    const imgRef = useRef(null);
+export default function ImagePreviewModal({ files, onClose, onSend, recipientName, recipientAvatar }) {
+    // State for all files
+    // Each item: { original: File, current: Blob, id: string }
+    const [fileStates, setFileStates] = useState([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
 
-    // Editing State
+    // Editing State (Current Image)
     const [isCropping, setIsCropping] = useState(false);
     const [crop, setCrop] = useState(null);
     const [completedCrop, setCompletedCrop] = useState(null);
     const [isFlipped, setIsFlipped] = useState(false);
-    const [isRotated, setIsRotated] = useState(false);
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [isRotated, setIsRotated] = useState(false); // Track if rotation happened (for Undo availability)
     
-    // Meta State
+    // Meta/Global State
     const [html, setHtml] = useState('');
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    const imgRef = useRef(null);
     const inputRef = useRef(null);
+    const fileInputRef = useRef(null); // [NEW] For adding more images
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
 
-    // Initialize Preview URL
+    // Init Logic
     useEffect(() => {
-        if (!file) return;
-        const objectUrl = URL.createObjectURL(file);
-        setPreviewUrl(objectUrl);
-        return () => URL.revokeObjectURL(objectUrl);
-    }, [file]);
+        if (!files || files.length === 0) return;
+        
+        const initStates = files.map((f, i) => ({
+            id: `img-${i}-${Date.now()}`,
+            original: f,
+            current: f, // Starts same as original
+            modified: false
+        }));
+        setFileStates(initStates);
+        setCurrentIndex(0);
+    }, [files]);
 
-    const resetState = () => {
+    // Current Active File
+    const currentFileState = fileStates[currentIndex];
+    const [previewUrl, setPreviewUrl] = useState(null);
+
+    // Update preview URL when index or file state changes
+    useEffect(() => {
+        if (!currentFileState) return;
+        const url = URL.createObjectURL(currentFileState.current);
+        setPreviewUrl(url);
+        
+        // Reset local edit states when switching or updating blob
         setIsCropping(false);
-        setIsFlipped(false);
-        setIsRotated(false);
         setCrop(null);
         setCompletedCrop(null);
-    };
+        setIsFlipped(false);
+        // isRotated tracks if *current blob* is different from *original* conceptually regarding clean edits? 
+        // Actually, 'modified' flag handles undo availability.
+        
+        return () => URL.revokeObjectURL(url);
+    }, [currentFileState]);
 
     const handleClose = () => {
-        resetState();
         onClose();
     };
 
-    // Rotation is handled by creating a new preview URL (Rotating the actual source reference)
-    // This allows the "Crop" box to naturally sit on top of the visually rotated image without complex coordinate math.
+    const updateCurrentFile = (newBlob) => {
+        setFileStates(prev => prev.map((s, i) => 
+            i === currentIndex 
+            ? { ...s, current: newBlob, modified: true } 
+            : s
+        ));
+    };
+
     const handleRotate = async () => {
         if (!previewUrl || isProcessing) return;
         setIsProcessing(true);
         try {
-            // Rotate 90 degrees
             const rotatedBlob = await getCroppedImg(previewUrl, null, 90);
-            const newUrl = URL.createObjectURL(rotatedBlob);
-            
-            // Clean up old url if it's not the original
-            // setPreviewUrl will trigger a re-render with the new vertical/horizontal dimensions
-            setPreviewUrl(newUrl);
+            updateCurrentFile(rotatedBlob);
             setIsRotated(true);
-            
-            // Reset crop because dimensions changed significantly
-            setCrop(null);
-            setCompletedCrop(null);
         } catch (e) {
             console.error('Rotation failed', e);
         } finally {
@@ -72,142 +90,10 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
         }
     };
 
-    const handleSendClick = async () => {
-        if (isProcessing || !previewUrl || !imgRef.current) return;
-        
-        console.log('[DEBUG] handleSendClick triggered. imgRef:', imgRef.current);
-        console.log('[DEBUG] Natural size:', imgRef.current?.naturalWidth, 'x', imgRef.current?.naturalHeight);
-
-        setIsProcessing(true);
-        try {
-            let finalBlob;
-            let finalWidth;
-            let finalHeight;
-
-            // Logic: If cropping and we have a valid crop
-            if (isCropping && completedCrop?.width && completedCrop?.height) {
-                const image = imgRef.current;
-                const scaleX = image.naturalWidth / image.width;
-                const scaleY = image.naturalHeight / image.height;
-                
-                const finalCrop = {
-                    x: completedCrop.x * scaleX,
-                    y: completedCrop.y * scaleY,
-                    width: completedCrop.width * scaleX,
-                    height: completedCrop.height * scaleY
-                };
-                
-                finalWidth = Math.round(finalCrop.width);
-                finalHeight = Math.round(finalCrop.height);
-
-                finalBlob = await getCroppedImg(
-                    previewUrl,
-                    finalCrop,
-                    0, // Rotation already baked into previewUrl
-                    null,
-                    { horizontal: isFlipped, vertical: false }
-                );
-            } else {
-                // If flipping is the only edit (Rotation is baked into previewUrl)
-                // Use current image natural dimensions (which reflect "baked" rotation)
-                // Use stored dimensions or fallback to ref if needed
-                finalWidth = imageDimensions.width || imgRef.current?.naturalWidth;
-                finalHeight = imageDimensions.height || imgRef.current?.naturalHeight;
-
-                if (isFlipped) {
-                    finalBlob = await getCroppedImg(
-                        previewUrl,
-                        null,
-                        0,
-                        null,
-                        { horizontal: isFlipped, vertical: false }
-                    );
-                } else {
-                    // Send current previewUrl (which might be rotated)
-                   finalBlob = await fetch(previewUrl).then(r => r.blob());
-                }
-            }
-            
-            // [FIX] Ensure dimensions are present
-            if (!finalWidth || !finalHeight) {
-                console.log('[DEBUG] Dimensions missing, extracting from blob...');
-                try {
-                    const tempUrl = URL.createObjectURL(finalBlob);
-                    const tempImg = new Image();
-                    await new Promise(resolve => {
-                        tempImg.onload = resolve;
-                        tempImg.src = tempUrl;
-                    });
-                    finalWidth = tempImg.naturalWidth;
-                    finalHeight = tempImg.naturalHeight;
-                    URL.revokeObjectURL(tempUrl);
-                    console.log('[DEBUG] Extracted dimensions:', finalWidth, 'x', finalHeight);
-                } catch (err) {
-                    console.error('[WARN] Failed to extract dimensions fallback:', err);
-                }
-            }
-            
-            // Convert HTML to plain text for sending
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            
-            // Replace images with alt text
-            const images = tempDiv.getElementsByTagName('img');
-            while (images.length > 0) {
-                const img = images[0];
-                const alt = img.getAttribute('alt') || '';
-                const textNode = document.createTextNode(alt);
-                img.parentNode.replaceChild(textNode, img);
-            }
-            
-            // cleanup divs/brs if any (basic implementation similar to MessageInput)
-            let plainText = tempDiv.textContent || "";
-            plainText = plainText.trim();
-
-            console.log('[DEBUG] Calling onSend with:', finalWidth, 'x', finalHeight);
-            onSend(finalBlob, plainText, finalWidth || 0, finalHeight || 0);
-            resetState();
-        } catch (e) {
-            console.error('Processing error:', e);
-            setIsProcessing(false);
-        }
-    };
-
-    const toggleCrop = () => {
-        setIsCropping(prev => {
-            const newState = !prev;
-            if (newState) {
-                // Initialize default full crop if starting
-                const img = imgRef.current;
-                if(img) {
-                     setCrop({
-                        unit: '%',
-                        x: 0,
-                        y: 0,
-                        width: 100,
-                        height: 100
-                    });
-                }
-            }
-            return newState;
-        });
-    };
-
-    const toggleFlip = () => setIsFlipped(prev => !prev);
-
-    const handleUndo = () => {
-        resetState();
-        if (file) {
-            // Restore original image
-            const objectUrl = URL.createObjectURL(file);
-            setPreviewUrl(objectUrl);
-        }
-    };
-
+    // Apply Crop/Flip to current blob and save it
     const handleDone = async () => {
         if (!previewUrl || isProcessing) return;
         
-        // If simply exiting crop mode without a real crop, just toggle off
         if (isCropping && (!completedCrop?.width || !completedCrop?.height) && !isFlipped) {
             setIsCropping(false);
             return;
@@ -217,7 +103,6 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
         try {
             let finalBlob;
             
-            // Calculate scale if cropping
             if (isCropping && completedCrop?.width && completedCrop?.height) {
                 const image = imgRef.current;
                 const scaleX = image.naturalWidth / image.width;
@@ -246,21 +131,12 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                     { horizontal: isFlipped, vertical: false }
                 );
             } else {
-                // No changes to apply?
                 setIsCropping(false);
                 setIsProcessing(false);
                 return;
             }
 
-            const newUrl = URL.createObjectURL(finalBlob);
-            setPreviewUrl(newUrl);
-            
-            // Reset Edit States since they are now baked in
-            setIsCropping(false);
-            setIsFlipped(false);
-            setCrop(null);
-            setCompletedCrop(null);
-            setIsRotated(true); // Mark as modified so Undo is available
+            updateCurrentFile(finalBlob);
             
         } catch (e) {
             console.error('Failed to apply edits', e);
@@ -269,154 +145,287 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
         }
     };
 
-    if (!file) return null;
+    const handleUndo = () => {
+        if (!currentFileState) return;
+        // Revert to original
+        setFileStates(prev => prev.map((s, i) => 
+            i === currentIndex 
+            ? { ...s, current: s.original, modified: false } 
+            : s
+        ));
+        setIsRotated(false);
+    };
+
+    const handleRemoveFile = (e, indexToRemove) => {
+        e.stopPropagation();
+        if (fileStates.length <= 1) {
+            onClose();
+            return;
+        }
+
+        const newStates = fileStates.filter((_, i) => i !== indexToRemove);
+        setFileStates(newStates);
+
+        // Adjust index if needed
+        if (currentIndex === indexToRemove) {
+            // If removing current, move to previous, or stay at 0
+            setCurrentIndex(prev => Math.max(0, prev - 1));
+        } else if (currentIndex > indexToRemove) {
+            // If removing one before current, shift current down
+            setCurrentIndex(prev => prev - 1);
+        }
+    };
+
+    const handleSendClick = async () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        
+        try {
+            // Prepare all files
+            // If current image has pending crop/flip in UI (user didn't click Done), should we apply it?
+            // Let's assume WYSIWYG - if they are in crop mode, we apply it. 
+            // Reuse handleDone logic? handleDone updates state. 
+            // Let's just iterate through fileStates.
+            
+            // Wait, if I am currently cropping, `currentFileState.current` is STALE (it's the pre-crop version).
+            // So if `isCropping` or `isFlipped` is true, we need to process the *current* view first.
+            
+            let finalFiles = [...fileStates];
+            
+            if (isCropping || isFlipped) {
+                // Apply pending edits to current index
+                 let currentBlob = finalFiles[currentIndex].current; // Default
+                 if (previewUrl && imgRef.current) {
+                      // Duplicate logic from handleDone, but synchronous-style for flow
+                      // Actually better to just reuse logic or copy-paste
+                      let activeBlob;
+                      if (isCropping && completedCrop?.width && completedCrop?.height) {
+                            const image = imgRef.current;
+                            const scaleX = image.naturalWidth / image.width;
+                            const scaleY = image.naturalHeight / image.height;
+                            const finalCrop = {
+                                x: completedCrop.x * scaleX,
+                                y: completedCrop.y * scaleY,
+                                width: completedCrop.width * scaleX,
+                                height: completedCrop.height * scaleY
+                            };
+                            activeBlob = await getCroppedImg(previewUrl, finalCrop, 0, null, { horizontal: isFlipped, vertical: false });
+                      } else if (isFlipped) {
+                            activeBlob = await getCroppedImg(previewUrl, null, 0, null, { horizontal: isFlipped, vertical: false });
+                      }
+                      
+                      if (activeBlob) {
+                          finalFiles[currentIndex] = { ...finalFiles[currentIndex], current: activeBlob };
+                      }
+                 }
+            }
+
+            // Extract blobs and dimensions
+            const filesToSend = [];
+            const configs = [];
+            
+            for (const state of finalFiles) {
+                // We need dimensions. 
+                // Either we loaded them when viewing, or we need to load them now.
+                // We can't rely on `imgRef` for images that aren't currently visible.
+                // We must load them.
+                
+                const blob = state.current;
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                await new Promise(r => { img.onload = r; img.src = url; });
+                
+                filesToSend.push(blob);
+                configs.push({ width: img.naturalWidth, height: img.naturalHeight });
+                URL.revokeObjectURL(url);
+            }
+
+            // Text processing
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const images = tempDiv.getElementsByTagName('img');
+            while (images.length > 0) {
+                const img = images[0];
+                const alt = img.getAttribute('alt') || '';
+                const textNode = document.createTextNode(alt);
+                img.parentNode.replaceChild(textNode, img);
+            }
+            const plainText = (tempDiv.textContent || "").trim();
+
+            onSend(filesToSend, plainText, configs);
+            
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const toggleCrop = () => {
+        setIsCropping(prev => {
+            const newState = !prev;
+            if (newState && imgRef.current) {
+                setCrop({ unit: '%', x: 0, y: 0, width: 100, height: 100 });
+            }
+            return newState;
+        });
+    };
+    const toggleFlip = () => setIsFlipped(prev => !prev);
+
+    if (fileStates.length === 0) return null;
 
     return (
         <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-50 flex flex-col items-center animate-in fade-in duration-200">
-            <style>{`
-                /* Custom styles for ReactCrop to match WhatsApp look */
-                .ReactCrop__crop-selection {
-                    border: 2px solid rgba(255, 255, 255, 0.8);
-                }
-                .ReactCrop__drag-handle {
-                    width: 10px;
-                    height: 10px;
-                    background-color: white;
-                    border: 1px solid rgba(0,0,0,0.2);
-                }
-                /* Hide default image when inside crop to avoid double render? No, ReactCrop wraps it. */
+             <style>{`
+                .ReactCrop__crop-selection { border: 2px solid rgba(255, 255, 255, 0.8); }
+                .ReactCrop__drag-handle { width: 10px; height: 10px; background-color: white; border: 1px solid rgba(0,0,0,0.2); }
+                
+                /* Carousel Scrollbar */
+                .carousel-scroll::-webkit-scrollbar { height: 6px; }
+                .carousel-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+                .carousel-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
             `}</style>
-
+            
             {/* HEADER */}
             <div className="w-full max-w-5xl p-4 flex items-center justify-between z-50 shrink-0">
                 <div className="flex items-center gap-3">
-                    <button 
-                        onClick={handleClose}
-                        className="p-2 -ml-2 rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
-                    >
+                    <button onClick={handleClose} className="p-2 -ml-2 rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    {recipientAvatar ? (
-                        <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
-                            <img src={recipientAvatar} alt={recipientName} className="w-full h-full object-cover" />
-                        </div>
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700">
-                            {recipientName?.charAt(0) || '?'}
-                        </div>
-                    )}
-                    <span className="text-slate-800 dark:text-white font-medium text-lg drop-shadow-sm flex items-center gap-1">{renderTextWithEmojis(recipientName)}</span>
-
+                    {/* Recipient Info - Hidden on small screens if needed, but keeping for now */}
+                    <div className="hidden sm:flex items-center gap-2">
+                        {recipientAvatar ? (
+                            <img src={recipientAvatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs">
+                                {recipientName?.charAt(0)}
+                            </div>
+                        )}
+                        <span className="text-slate-800 dark:text-white font-medium">{renderTextWithEmojis(recipientName)}</span>
+                    </div>
                 </div>
 
-                {/* TOOLS */}
                 <div className="flex items-center gap-2">
-                    {(isFlipped || isRotated || completedCrop) && (
-                        <button 
-                            onClick={handleUndo} 
-                            className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white rounded-full transition-all active:scale-95"
-                            title="Undo Changes"
-                        >
+                    {currentFileState?.modified && (
+                        <button onClick={handleUndo} className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-all" title="Undo">
                             <span className="material-symbols-outlined">undo</span>
                         </button>
                     )}
-                    
-                    {/* Done Button (Visible when cropping or flipped) */}
                     {(isCropping || isFlipped) && (
-                        <button 
-                            onClick={handleDone} 
-                            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white rounded-full text-sm font-medium transition-all active:scale-95 shadow-lg"
-                            title="Done"
-                        >
+                        <button onClick={handleDone} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white rounded-full text-sm font-medium transition-all shadow-lg">
                             Done
                         </button>
                     )}
-
-                    <button 
-                        onClick={toggleCrop} 
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isCropping ? 'bg-indigo-100 text-indigo-600 dark:bg-slate-700 dark:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}`}
-                        title="Crop"
-                    >
+                    <button onClick={toggleCrop} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isCropping ? 'bg-indigo-100 text-indigo-600 dark:bg-slate-700 dark:text-white' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}>
                         <span className="material-symbols-outlined">crop</span>
                     </button>
-                    <button 
-                        onClick={handleRotate} 
-                        className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white rounded-full transition-all active:scale-95"
-                        title="Rotate"
-                    >
+                    <button onClick={handleRotate} className="w-10 h-10 flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-full transition-all">
                         <span className="material-symbols-outlined">rotate_right</span>
                     </button>
-                    <button 
-                        onClick={toggleFlip} 
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 ${isFlipped ? 'text-violet-600 bg-violet-50 dark:bg-transparent dark:text-violet-400' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}`}
-                        title="Flip Horizontal"
-                    >
+                    <button onClick={toggleFlip} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isFlipped ? 'text-violet-600 bg-violet-50 dark:bg-transparent dark:text-violet-400' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}>
                         <span className="material-symbols-outlined">flip</span>
                     </button>
                 </div>
             </div>
 
-            {/* MAIN PREVIEW AREA */}
-            <div className="flex-1 w-full flex items-center justify-center p-4 pb-24 overflow-hidden min-h-0">
-                {/* 
-                    Crucial: We use previewUrl. 
-                    If isCropping is TRUE, we wrap in ReactCrop.
-                    If isCropping is FALSE, we just show the IMG.
-                    This prevents the crop grid from being visible when not cropping.
-                */}
-                
-                {isCropping ? (
+            {/* MAIN PREVIEW */}
+            <div className="flex-1 w-full flex items-center justify-center p-4 pb-0 overflow-hidden min-h-0 relative">
+                 {isCropping ? (
                     <ReactCrop
                         crop={crop}
                         onChange={(_, percentCrop) => setCrop(percentCrop)}
                         onComplete={(c) => setCompletedCrop(c)}
-                        aspect={undefined} // Freeform
                         className="max-h-full max-w-full"
-                        style={{
-                            maxHeight: '70vh',
-                            maxWidth: '100%'
-                        }}
+                        style={{ maxHeight: '60vh', maxWidth: '100%' }}
                     >
                         <img 
                             ref={imgRef}
                             src={previewUrl}
-                            alt="Preview"
-                            className="max-h-[70vh] w-auto object-contain"
-                            style={{ 
-                                transform: isFlipped ? `scaleX(-1)` : 'none',
-                                maxWidth: '100%',
-                            }}
-                            onLoad={(e) => {
-                                 setImageDimensions({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight });
-                            }}
+                            alt=""
+                            className="max-h-[60vh] w-auto object-contain"
+                            style={{ transform: isFlipped ? `scaleX(-1)` : 'none', maxWidth: '100%' }}
                         />
                     </ReactCrop>
-                ) : (
+                 ) : (
                     <img 
                         ref={imgRef}
                         src={previewUrl}
-                        alt="Preview"
-                        className="max-h-[70vh] w-auto object-contain shadow-2xl transition-transform"
-                        style={{ 
-                            transform: isFlipped ? `scaleX(-1)` : 'none',
-                            maxWidth: '100%',
-                        }}
-                        onLoad={(e) => {
-                             setImageDimensions({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight });
-                        }}
+                        alt=""
+                        className="max-h-[60vh] w-auto object-contain shadow-2xl"
+                        style={{ transform: isFlipped ? `scaleX(-1)` : 'none', maxWidth: '100%' }}
                     />
-                )}
+                 )}
             </div>
 
+            {/* CAROUSEL */}
+            <div className="w-full max-w-3xl px-4 py-2 mt-2 mb-20 z-50">
+                <div className="flex gap-2 overflow-x-auto carousel-scroll py-2 px-1 justify-center">
+                    {fileStates.map((state, idx) => (
+                        <div
+                            key={state.id}
+                            onClick={() => setCurrentIndex(idx)}
+                            className={`relative w-14 h-14 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer group/item ${
+                                idx === currentIndex 
+                                ? 'border-violet-500 scale-110 shadow-md' 
+                                : 'border-transparent opacity-60 hover:opacity-100'
+                            }`}
+                        >
+                            <img 
+                                src={URL.createObjectURL(state.current)} 
+                                className="w-full h-full object-cover" 
+                                onLoad={(e) => URL.revokeObjectURL(e.target.src)}
+                            />
+                            <button
+                                onClick={(e) => handleRemoveFile(e, idx)}
+                                className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                title="Remove image"
+                            >
+                                <span className="material-symbols-outlined text-[10px] font-bold">close</span>
+                            </button>
+                        </div>
+                    ))}
+                    {/* Add more button could go here */}
+
+                    {/* Add More Button */}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative w-14 h-14 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:border-slate-400 dark:hover:border-slate-500 transition-all shrink-0 bg-white/5 dark:bg-slate-800/50"
+                        title="Add more images"
+                    >
+                         <span className="material-symbols-outlined">add</span>
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={(e) => {
+                            if (e.target.files?.length > 0) {
+                                const newFiles = Array.from(e.target.files);
+                                const newStates = newFiles.map((f, i) => ({
+                                    id: `img-added-${Date.now()}-${i}`,
+                                    original: f,
+                                    current: f,
+                                    modified: false
+                                }));
+                                setFileStates(prev => [...prev, ...newStates]);
+                                // Optional: switch to new file?
+                                // setCurrentIndex(prev => prev + 1); 
+                            }
+                            e.target.value = ''; // Reset
+                        }} 
+                    />
+                </div>
+            </div>
 
             {/* CAPTION BAR */}
-            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white/80 to-transparent dark:from-slate-900 dark:via-slate-900/80 pt-12 pb-6 px-4 z-50">
-                <div className="max-w-3xl mx-auto flex items-end gap-3">
-                    <div className="flex-1 bg-slate-100 dark:bg-slate-800/90 backdrop-blur-md rounded-2xl flex items-center border border-slate-200 dark:border-white/10 focus-within:border-violet-500/50 transition-colors shadow-lg relative min-h-[50px]">
+            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white/80 to-transparent dark:from-slate-900 dark:via-slate-900/80 pt-12 pb-6 px-4 z-50 pointer-events-none">
+                <div className="max-w-3xl mx-auto flex items-end gap-3 pointer-events-auto">
+                     <div className="flex-1 bg-slate-100 dark:bg-slate-800/90 backdrop-blur-md rounded-2xl flex items-center border border-slate-200 dark:border-white/10 focus-within:border-violet-500/50 transition-colors shadow-lg relative min-h-[50px]">
                         <button 
                             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                             className={`pl-3 pr-2 py-3 h-full flex items-center justify-center text-slate-400 hover:text-yellow-400 transition-colors ${showEmojiPicker ? 'text-yellow-400' : ''}`}
-                            type="button"
                         >
                              <span className="material-symbols-outlined text-[24px]">mood</span>
                         </button>
@@ -431,32 +440,23 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                                         const imageUrl = `https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png`;
                                         const imageTag = `<img src="${imageUrl}" alt="${emojiData.emoji}" class="w-6 h-6 inline-block align-bottom" style="margin: 0 1px;" draggable="false" />`;
                                         
-                                        // Simple append for now, or insert at cursor if we tracked it (ContentEditable usually inserts at end if not focused, but let's try to just append if not focused, or use execCommand if focused?)
-                                        // Using execCommand 'insertHTML' is best if the div is focused. If not, we append.
-                                        
                                         if (document.activeElement === inputRef.current) {
                                             document.execCommand('insertHTML', false, imageTag);
-                                            setHtml(inputRef.current.innerHTML); // Sync state
+                                            setHtml(inputRef.current.innerHTML); 
                                         } else {
-                                            // Append to end
                                             setHtml(prev => prev + imageTag);
                                         }
                                     }}
                                     lazyLoadEmojis={true}
-                                    searchDisabled={false}
-                                    skinTonesDisabled={true}
                                 />
                             </div>
                         )}
 
-                        {/* Input Wrapper for correct positioning */}
                         <div className="relative flex-1 min-w-0 h-full flex items-center">
                             <ContentEditable
                                 innerRef={inputRef}
                                 html={html}
-                                onChange={(e) => {
-                                    setHtml(e.target.value);
-                                }}
+                                onChange={(e) => setHtml(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
@@ -477,17 +477,23 @@ export default function ImagePreviewModal({ file, onClose, onSend, recipientName
                     <button
                         onClick={handleSendClick}
                         disabled={isProcessing}
-                        className="p-3 bg-violet-600 hover:bg-violet-700 text-white rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center aspect-square"
+                        className="w-12 h-12 bg-violet-600 hover:bg-violet-700 text-white rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center shrink-0"
                     >
-                        {isProcessing ? (
+                         {isProcessing ? (
                             <span className="material-symbols-outlined animate-spin text-[24px]">progress_activity</span>
                         ) : (
-                            <span className="material-symbols-outlined filled text-[24px]">send</span>
+                            <div className="relative flex items-center justify-center">
+                                <span className="material-symbols-outlined filled text-[24px] leading-none mt-0.5 ml-0.5">send</span>
+                                {fileStates.length > 1 && (
+                                    <span className="absolute -top-2 -right-2 bg-white text-violet-600 text-[10px] font-bold px-1 rounded-full shadow-sm border border-violet-100">
+                                        {fileStates.length}
+                                    </span>
+                                )}
+                            </div>
                         )}
                     </button>
                 </div>
             </div>
-
         </div>
     );
 }

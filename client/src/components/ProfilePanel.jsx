@@ -8,6 +8,8 @@ import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
 import { linkifyText } from '../utils/linkify';
 import { renderTextWithEmojis, renderTextWithEmojisToHtml } from '../utils/emojiRenderer';
+import SharedMedia from './SharedMedia'; // [NEW]
+
 
 const timeAgo = (dateString) => {
     if (!dateString) return '';
@@ -22,7 +24,7 @@ const timeAgo = (dateString) => {
     return date.toLocaleDateString();
 };
 
-export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess }) {
+export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess, onGoToMessage }) {
     const { token, user: currentUser, updateUser, logout } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
     const [profile, setProfile] = useState(null);
@@ -789,6 +791,12 @@ export default function ProfilePanel({ userId, onClose, roomId, onActionSuccess 
                                 )}
                             </>
                         )}
+                    </div>
+
+                    {/* Shared Media */}
+                    <div className="border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
+                         <h3 className="text-slate-500 text-xs font-bold uppercase px-4 pt-4 mb-1 tracking-wider">Shared Content</h3>
+                         <SharedMedia roomId={roomId} onGoToMessage={onGoToMessage} />
                     </div>
 
                     {/* Groups in Common */}

@@ -378,26 +378,36 @@ router.get('/', async (req, res) => {
     try {
         const roomsRes = await db.query(`
             SELECT r.*, rm.role, rm.last_read_at, rm.is_archived,
-            (SELECT u.display_name FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_name,
-            (SELECT u.username FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_username,
-            (SELECT u.avatar_thumb_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_thumb,
-            (SELECT u.avatar_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_avatar_url,
-            (SELECT u.id FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1 LIMIT 1) as other_user_id,
+            (SELECT u.display_name FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1) as other_user_name,
+            (SELECT u.username FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1) as other_user_username,
+            (SELECT u.avatar_thumb_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1) as other_user_avatar_thumb,
+            (SELECT u.avatar_url FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1) as other_user_avatar_url,
+            (SELECT u.id FROM room_members rm2 JOIN users u ON rm2.user_id = u.id WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1) as other_user_id,
             (SELECT u.display_name FROM users u WHERE u.id = r.created_by) as creator_name,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
             (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > rm.last_read_at) as unread_count,
-            (SELECT content FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_content,
-            (SELECT type FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_type,
-            (SELECT user_id FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_sender_id,
-            (SELECT id FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_id,
-            (SELECT status FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_status,
-            (SELECT caption FROM messages m WHERE m.room_id = r.id AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01') ORDER BY m.created_at DESC LIMIT 1) as last_message_caption,
+            last_msg.content as last_message_content,
+            last_msg.type as last_message_type,
+            last_msg.user_id as last_message_sender_id,
+            last_msg.id as last_message_id,
+            last_msg.status as last_message_status,
+            last_msg.caption as last_message_caption,
             gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members
             FROM rooms r 
             JOIN room_members rm ON r.id = rm.room_id 
             LEFT JOIN group_permissions gp ON r.id = gp.group_id
-            WHERE rm.user_id = $1 AND (rm.is_hidden IS FALSE OR rm.is_hidden IS NULL)
+            LEFT JOIN LATERAL (
+                SELECT content, type, user_id, id, status, caption
+                FROM messages m
+                WHERE m.room_id = r.id
+                AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01')
+                AND (m.is_deleted_for_everyone IS FALSE OR m.is_deleted_for_everyone IS NULL)
+                AND (m.deleted_for_user_ids IS NULL OR NOT ($1::text = ANY(m.deleted_for_user_ids)))
+                ORDER BY m.created_at DESC
+                LIMIT 1
+            ) last_msg ON true
+            WHERE rm.user_id = $1::integer AND (rm.is_hidden IS FALSE OR rm.is_hidden IS NULL)
             ORDER BY rm.is_archived ASC, COALESCE(r.last_message_at, r.created_at) DESC
         `, [req.user.id]);
         
@@ -445,7 +455,7 @@ router.get('/:id/messages', async (req, res) => {
                    m.author_name, m.meta,
                    (aps.heard_at IS NOT NULL) as audio_heard,
                    m.created_at,
-                   m.image_url, m.caption, m.image_width, m.image_height, m.image_size,
+                   m.image_url, m.caption, m.image_width, m.image_height, m.image_size, m.attachments,
                    u.display_name, u.username, u.avatar_thumb_url, u.avatar_url 
             FROM messages m 
             LEFT JOIN users u ON m.user_id = u.id 
@@ -469,14 +479,79 @@ router.get('/:id/messages', async (req, res) => {
             // [REVERTED] No dynamic signing/proxying. AWS Bucket should be Public.
             // if (msg.type === 'image' && msg.image_url) { ... }
 
+            let parsedAttachments = [];
+            if (msg.attachments) {
+                 if (typeof msg.attachments === 'string') {
+                    try {
+                        parsedAttachments = JSON.parse(msg.attachments);
+                    } catch (e) { parsedAttachments = []; }
+                 } else if (Array.isArray(msg.attachments)) {
+                     parsedAttachments = msg.attachments;
+                 }
+            }
+
             return { 
                 ...msg, 
                 audio_waveform: parsedWaveform,
+                attachments: parsedAttachments,
                 created_at: msg.created_at
             };
         }));
 
         res.json(messages);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get Shared Media
+router.get('/:id/media', async (req, res) => {
+    const roomId = req.params.id;
+    const { type } = req.query; // 'photos', 'videos', 'files', 'links', 'voice'
+
+    try {
+        const memberCheck = await db.query('SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, req.user.id]);
+        if (!memberCheck.rows.length) return res.status(403).json({ error: 'Not a member' });
+
+        let query = `
+            SELECT m.*, u.display_name, u.username, u.avatar_url, u.avatar_thumb_url
+            FROM messages m
+            LEFT JOIN users u ON m.user_id = u.id
+            JOIN room_members rm ON rm.room_id = m.room_id AND rm.user_id = $2
+            WHERE m.room_id = $1 
+            AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01')
+            AND (m.is_deleted_for_everyone IS FALSE OR m.is_deleted_for_everyone IS NULL)
+            AND (m.deleted_for_user_ids IS NULL OR NOT ($2::text = ANY(m.deleted_for_user_ids)))
+        `;
+        
+        const params = [roomId, req.user.id];
+
+        if (type === 'photos') {
+            query += ` AND (m.type = 'image' OR (m.attachments IS NOT NULL AND jsonb_array_length(m.attachments) > 0))`;
+        } else if (type === 'videos') {
+            query += ` AND (m.type = 'video' OR m.type = 'gif' OR (m.type = 'text' AND m.content ILIKE '%.mp4'))`;
+        } else if (type === 'files') {
+            query += ` AND m.type = 'file'`;
+        } else if (type === 'links') {
+            // Naive link detection
+            query += ` AND (m.content ~ 'https?://' OR m.content ~ 'www\\.')`;
+        } else if (type === 'voice') {
+            query += ` AND m.type = 'audio'`;
+        } else {
+             // Default catch-all for media? Or just return all?
+             // Let's return all media types if no specific type is requested
+             query += ` AND (
+                 m.type IN ('image', 'video', 'audio', 'file', 'gif') 
+                 OR (m.attachments IS NOT NULL AND jsonb_array_length(m.attachments) > 0)
+                 OR (m.content ~ 'https?://' OR m.content ~ 'www\\.')
+             )`;
+        }
+
+        query += ` ORDER BY m.created_at DESC LIMIT 100`; // Cap at 100 for now
+
+        const result = await db.query(query, params);
+        res.json(result.rows);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Server error' });

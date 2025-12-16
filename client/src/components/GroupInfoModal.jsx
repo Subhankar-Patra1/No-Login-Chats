@@ -9,8 +9,9 @@ import { renderTextWithEmojis } from '../utils/emojiRenderer';
 import AvatarEditorModal from './AvatarEditorModal';
 import GroupPermissionsView from './GroupPermissionsView';
 import GroupParticipantsView from './GroupParticipantsView';
+import SharedMedia from './SharedMedia'; // [NEW]
 
-export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket }) {
+export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket, onGoToMessage }) {
     const { token, user: currentUser } = useAuth();
     const [view, setView] = useState('main'); // 'main', 'permissions', 'participants'
     
@@ -795,6 +796,14 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket 
                                 )}
                             </div>
                         )}
+                    </div>
+                    
+                    {/* Shared Media */}
+                    <div className="border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
+                         <h3 className="text-slate-500 font-bold text-xs uppercase px-6 pt-6 mb-2 tracking-wider">Shared Content</h3>
+                         <div className="px-4 pb-6">
+                            <SharedMedia roomId={room.id} onGoToMessage={onGoToMessage} />
+                         </div>
                     </div>
                     
                     {/* Share Section (Only for Groups) */}

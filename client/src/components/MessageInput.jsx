@@ -338,11 +338,14 @@ export default function MessageInput({
 
     // [NEW] Image Handlers
     const handleImageChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (file) {
+        const files = Array.from(e.target.files || []); // [NEW] Handle multiple
+        if (files.length > 0) {
              // [NEW] Delegate to parent for Scoped Preview
              if (onImageSelected) {
-                 onImageSelected(file);
+                 // Pass array if parent supports it, otherwise fallback (implementation plan says update parent too)
+                 // Parent expects "files" (plural) in new logic?
+                 // Let's pass the array. ChatWindow needs to handle it.
+                 onImageSelected(files);
              }
              // Clear input so same file can be selected again
              if (fileInputRef.current) fileInputRef.current.value = '';
@@ -745,6 +748,7 @@ export default function MessageInput({
                                             ref={fileInputRef} 
                                             accept="image/*" 
                                             className="hidden" 
+                                            multiple // [NEW] Allow multiple
                                             onChange={handleImageChange} 
                                         />
                                     </>

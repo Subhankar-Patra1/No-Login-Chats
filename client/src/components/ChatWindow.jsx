@@ -86,7 +86,7 @@ const PrivilegedUsersModal = ({ isOpen, onClose, title, roomId, roleFilter, toke
     );
 };
 
-export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo, isLoading }) {
+export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo, isLoading, highlightMessageId, onGoToMessage }) {
     const { token } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
     const [showProfileCard, setShowProfileCard] = useState(false);
@@ -96,7 +96,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const [replyTo, setReplyTo] = useState(null); 
     const [editingMessage, setEditingMessage] = useState(null);
     const [typingUsers, setTypingUsers] = useState([]);
-    const [selectedImage, setSelectedImage] = useState(null); // [NEW] Scoped Image Preview State
+    const [selectedImages, setSelectedImages] = useState(null); // [NEW] Scoped Image Preview State (Array)
 
     const typingTimeoutsRef = useRef({});
 
@@ -139,6 +139,16 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             console.error(err);
         }
     };
+
+    // [NEW] Scroll to validated message
+    useEffect(() => {
+        if (highlightMessageId) {
+            // Small timeout to ensure DOM is ready if switching rooms
+            setTimeout(() => {
+                scrollToMatch(highlightMessageId);
+            }, 100);
+        }
+    }, [highlightMessageId]);
 
     useEffect(() => {
         if (room.initialMessages) {
@@ -489,10 +499,24 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 ));
             }
         } else if (msg.type === 'image') {
-            formData.append('image', msg.localBlob);
+            // [FIX] Retry for multiple images? Complicated if single message has multiple.
+            // If message was created successfully but upload failed, we'd need to re-upload.
+            // If backend supports re-uploading to same ID? Or just new message?
+            // Current retry logic creates new upload request for the temp ID.
+            // If attachments, we need to handle that.
+            // For now, let's assume retry just re-sends the blob as a single image (fallback) or we need to store array of blobs.
+            // To simplify, if it's a multi-image message, `localBlob` should be an array or `localBlobs`.
+            
+            if (msg.localBlobs && msg.localBlobs.length > 0) {
+                 const formData = new FormData();
+                 msg.localBlobs.forEach(b => formData.append('images', b));
+                 // Append metadata if needed
+            } else {
+                 formData.append('images', msg.localBlob);
+            }
+            
             formData.append('caption', msg.caption || '');
-            if (msg.image_width) formData.append('width', msg.image_width);
-            if (msg.image_height) formData.append('height', msg.image_height);
+            // Retry logic might need more work for multiple images, keeping simple for now.
 
             try {
                 await uploadImageWithProgress(formData, msg.id);
@@ -545,9 +569,20 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         return `${typingUsers[0].name}, ${typingUsers[1].name}, and ${typingUsers.length - 2} others are typing...`;
     };
 
-    const handleSendImage = async (file, caption, width, height) => {
-        console.log('[DEBUG] ChatWindow handleSendImage:', width, 'x', height);
+    const handleSendImages = async (files, caption, configs) => {
+        // configs is array of { width, height, ... } corresponding to files
+        console.log('[DEBUG] ChatWindow handleSendImages:', files.length, 'files');
         const tempId = `temp-${Date.now()}`;
+        
+        // Create attachments for optimistic UI
+        const attachments = files.map((file, i) => ({
+            url: URL.createObjectURL(file),
+            width: configs?.[i]?.width || 0,
+            height: configs?.[i]?.height || 0,
+            size: file.size,
+            type: 'image'
+        }));
+
         // Optimistic UI
         const tempMsg = {
             id: tempId,
@@ -556,10 +591,12 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             type: 'image',
             content: 'Image',
             caption: caption || '',
-            image_url: URL.createObjectURL(file), // Local preview
-            image_width: width || 0,
-            image_height: height || 0,
-            image_size: file.size,
+            // Legacy top-level props (use first image)
+            image_url: attachments[0].url,
+            image_width: attachments[0].width,
+            image_height: attachments[0].height,
+            image_size: attachments[0].size,
+            attachments: attachments, // [NEW] Store all
             replyTo: replyTo || null,
             created_at: new Date().toISOString(),
             username: user.username,
@@ -567,17 +604,24 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             status: 'sending',
             uploadStatus: 'uploading',
             uploadProgress: 0,
-            localBlob: file
+            localBlobs: files // Store all blobs for retry
         };
         setMessages(prev => [...prev, tempMsg]);
         setReplyTo(null); // Clear reply context
 
         const formData = new FormData();
-        formData.append('image', file);
+        files.forEach(f => formData.append('images', f));
         formData.append('roomId', room.id);
         formData.append('caption', caption || '');
-        if (width) formData.append('width', width);
-        if (height) formData.append('height', height);
+        
+        // Append dims
+        if (configs) {
+            configs.forEach(c => {
+                 formData.append('widths', c.width);
+                 formData.append('heights', c.height);
+            });
+        }
+        
         if (replyTo) formData.append('replyToMessageId', replyTo.id);
         formData.append('tempId', tempId);
 
@@ -620,14 +664,16 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         });
     };
     // [NEW] Handler for when image is selected in MessageInput
-    const handleImageSelected = (file) => {
-        setSelectedImage(file);
+    const handleImageSelected = (files) => {
+        // Normalize to array
+        const fileList = Array.isArray(files) ? files : [files];
+        setSelectedImages(fileList);
     };
 
     // [NEW] Handler for sending from Preview Modal
-    const handleSendImageConfirm = (file, caption, width, height) => {
-         handleSendImage(file, caption, width, height);
-         setSelectedImage(null);
+    const handleSendImageConfirm = (files, caption, configs) => {
+         handleSendImages(files, caption, configs);
+         setSelectedImages(null);
     };
 
     const handleSendGif = async (gif, caption) => {
@@ -1012,19 +1058,23 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                             onBack(); // Go back to empty state
                         }
                     }}
+                    onGoToMessage={(msgId) => {
+                        setShowProfileCard(false);
+                        if (onGoToMessage) onGoToMessage(msgId);
+                    }}
                 />
             )}
 
             {/* [NEW] Scoped Image Preview Modal */}
-            {selectedImage && (
+            {selectedImages && (
                 <div className="absolute inset-0 z-20 flex flex-col bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                     <ImagePreviewModal
-                        file={selectedImage}
-                        onClose={() => setSelectedImage(null)}
+                    <ImagePreviewModal 
+                        files={selectedImages} 
+                        onClose={() => setSelectedImages(null)}
                         onSend={handleSendImageConfirm}
-                        recipientName={room.name || 'Chat'} 
-                        recipientAvatar={room.avatar_url || null}
-                     />
+                        recipientName={room.type === 'direct' ? room.name : room.name}
+                        recipientAvatar={room.type === 'direct' ? (room.avatar_url || room.avatar_thumb_url) : (room.avatar_url || room.avatar_thumb_url)}
+                    />
                 </div>
             )}
         </div>

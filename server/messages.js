@@ -116,12 +116,24 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
 });
 
 // Send Image
-router.post('/image', upload.single('image'), async (req, res) => {
+// Send Image (Multiple)
+router.post('/image', upload.array('images', 10), async (req, res) => {
     try {
-        const { roomId, caption, width, height, size, tempId, replyToMessageId } = req.body;
-        const file = req.file;
+        const { roomId, caption, size, tempId, replyToMessageId } = req.body;
+        // width/height might come as arrays or single values depending on implementation. 
+        // For simplicity, let's assume we calculate dimensions on server or client sends JSON metadata.
+        // Client plan: Client sends files. Client also needs to send metadata? 
+        // `req.body` with `upload.array` will have text fields. If multiple valid, they are arrays?
+        // Let's rely on extracting from file or just fallback for now. 
+        // Better: client sends `widths` and `heights` as JSON strings or arrays.
+        
+        let files = req.files;
+        // Fallback for single file upload compatibility if client hasn't updated
+        if (!files || files.length === 0) {
+            if (req.file) files = [req.file]; // Should not happen with upload.array but just in case of mixed middleware use
+        }
 
-        if (!file) return res.status(400).json({ error: 'No image file provided' });
+        if (!files || files.length === 0) return res.status(400).json({ error: 'No image files provided' });
         
         // Verify room membership
         const memberRes = await db.query('SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2', [roomId, req.user.id]);
@@ -140,18 +152,37 @@ router.post('/image', upload.single('image'), async (req, res) => {
              return res.status(403).json({ error: 'Only owner can send messages' });
         }
 
-        // Generate Filename
-        const ext = file.mimetype.split('/')[1] || 'png';
-        const finalFileName = `${roomId}/images/${Date.now()}-${req.user.id}.${ext}`;
+        // Generate Filenames & Upload
+        const attachments = [];
+        const configWidths = req.body.widths ? (Array.isArray(req.body.widths) ? req.body.widths : [req.body.widths]) : [];
+        const configHeights = req.body.heights ? (Array.isArray(req.body.heights) ? req.body.heights : [req.body.heights]) : [];
 
-        const imageUrl = await uploadFile(file.buffer, finalFileName, file.mimetype);
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const ext = file.mimetype.split('/')[1] || 'png';
+            const finalFileName = `${roomId}/images/${Date.now()}-${req.user.id}-${i}.${ext}`;
+            
+            const imageUrl = await uploadFile(file.buffer, finalFileName, file.mimetype);
+            
+            attachments.push({
+                url: imageUrl,
+                width: parseInt(configWidths[i] || 0),
+                height: parseInt(configHeights[i] || 0),
+                size: file.size,
+                type: 'image'
+            });
+        }
+        
+        // For backward compatibility, use the first image for top-level columns
+        const primaryImage = attachments[0];
 
         // Insert into DB
+        // Insert into DB
         const result = await db.query(
-            `INSERT INTO messages (room_id, user_id, type, image_url, image_width, image_height, image_size, content, caption, reply_to_message_id) 
-             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, $9) 
+            `INSERT INTO messages (room_id, user_id, type, image_url, image_width, image_height, image_size, content, caption, reply_to_message_id, attachments) 
+             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, $9, $10) 
              RETURNING id, status, created_at`,
-            [roomId, req.user.id, imageUrl, parseInt(width) || 0, parseInt(height) || 0, parseInt(size) || file.size, 'Image', caption || '', replyToMessageId || null]
+            [roomId, req.user.id, primaryImage.url, primaryImage.width, primaryImage.height, primaryImage.size, 'Image', caption || '', replyToMessageId || null, JSON.stringify(attachments)]
         );
         
         // Update Room Last Message At
@@ -164,13 +195,6 @@ router.post('/image', upload.single('image'), async (req, res) => {
         const userRes = await db.query('SELECT display_name, avatar_thumb_url, avatar_url FROM users WHERE id = $1', [req.user.id]);
         const user = userRes.rows[0];
 
-        let finalUrl = imageUrl;
-        // [REVERTED] No proxy/signing for new messages.
-        /*
-        const key = getKeyFromUrl(imageUrl);
-        if (key) { ... }
-        */
-
         const message = {
             id: info.id,
             room_id: roomId,
@@ -178,14 +202,14 @@ router.post('/image', upload.single('image'), async (req, res) => {
             type: 'image',
             content: 'Image',
             caption: caption || '',
-            image_url: finalUrl,
-            image_width: parseInt(width || 0),
-            image_height: parseInt(height || 0),
-            image_size: parseInt(size || file.size),
+            image_url: primaryImage.url,
+            image_width: primaryImage.width,
+            image_height: primaryImage.height,
+            image_size: primaryImage.size,
+            attachments: attachments,
             status: info.status,
             reply_to_message_id: replyToMessageId,
             created_at: createdAtISO,
-
             username: req.user.username,
             display_name: user ? user.display_name : req.user.display_name,
             avatar_thumb_url: user ? user.avatar_thumb_url : null,
@@ -401,6 +425,10 @@ router.delete('/:id/for-me', async (req, res) => {
             WHERE id = $2
         `, [String(userId), messageId]);
 
+        const io = req.app.get('io');
+        // Force client to refresh rooms list to update last message preview
+        io.to(`user:${userId}`).emit('rooms:refresh');
+
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting for me:', err);
@@ -532,6 +560,30 @@ router.put('/:id/edit', async (req, res) => {
     } catch (err) {
         console.error('Error editing message:', err);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Proxy Download
+router.get('/proxy-download', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+
+        const axios = require('axios');
+        const response = await axios({
+            method: 'get',
+            url: url,
+            responseType: 'stream'
+        });
+
+        // Set headers
+        res.setHeader('Content-Type', response.headers['content-type']);
+        res.setHeader('Content-Disposition', `attachment; filename="download.${response.headers['content-type'].split('/')[1] || 'bin'}"`);
+
+        response.data.pipe(res);
+    } catch (err) {
+        console.error('Proxy download error:', err);
+        res.status(500).json({ error: 'Download failed' });
     }
 });
 

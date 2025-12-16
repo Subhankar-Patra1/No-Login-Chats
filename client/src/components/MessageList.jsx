@@ -354,6 +354,90 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             )}
                             </>
                         ) : msg.type === 'image' ? (
+                            // [NEW] Grid Layout Logic
+                            (msg.attachments && msg.attachments.length > 1) ? (
+                                <div className="flex flex-col mt-1 mb-1 w-[280px] sm:w-[320px]">
+                                    <div className={`relative grid gap-0.5 rounded-lg overflow-hidden ${
+                                        msg.attachments.length === 2 ? 'grid-cols-2' :
+                                        msg.attachments.length === 3 ? 'grid-cols-2' :
+                                        'grid-cols-2'
+                                    }`}
+                                    >
+                                        {msg.attachments.slice(0, 4).map((att, index) => {
+                                            // Layout specific styles for 3 images
+                                            // If 3 images: Index 0 spans 2 cols?
+                                            const isThree = msg.attachments.length === 3;
+                                            const span = (isThree && index === 0) ? 'col-span-2' : '';
+                                            
+                                            return (
+                                            <div 
+                                                key={index}
+                                                className={`relative group/image overflow-hidden w-full h-full aspect-square ${span} cursor-pointer hover:opacity-95 transition-opacity bg-slate-200 dark:bg-slate-700`}
+                                                onClick={(e) => { e.stopPropagation(); onImageClick(msg, index); }}
+                                            >
+                                                <img 
+                                                    src={att.url} 
+                                                    alt={msg.caption || "Image"} 
+                                                    className="w-full h-full object-cover" 
+                                                    loading="lazy" 
+                                                />
+                                                {/* +N Overlay for 4th item if more exist */}
+                                                {index === 3 && msg.attachments.length > 4 && (
+                                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xl font-bold backdrop-blur-[1px]">
+                                                        +{msg.attachments.length - 4}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            );
+                                        })}
+                                        
+                                        {/* Upload Spinner Overlay for Grid */}
+                                        {msg.status === 'sending' && (
+                                            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center transition-all duration-300 z-10 pointer-events-none">
+                                                {(msg.uploadProgress || 0) < 1 ? (
+                                                    <div className="relative w-10 h-10">
+                                                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                                            <path
+                                                                className="text-white/20"
+                                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="4"
+                                                            />
+                                                            <path
+                                                                className="text-white drop-shadow-md transition-all duration-200 ease-out"
+                                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="4"
+                                                                strokeDasharray={`${Math.round((msg.uploadProgress || 0) * 100)}, 100`}
+                                                            />
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white shadow-black/50 drop-shadow-sm">
+                                                            {Math.round((msg.uploadProgress || 0) * 100)}%
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-2 animate-in fade-in duration-300">
+                                                        <div className="w-8 h-8 rounded-full border-[3px] border-white/30 border-t-white animate-spin shadow-lg"></div>
+                                                        <span className="text-[10px] font-bold text-white shadow-black/50">Processing</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Caption for Grid */}
+                                    {msg.caption && (
+                                        <p className="text-sm mt-1 mb-1 whitespace-pre-wrap break-words px-1">
+                                            {linkifyText(msg.caption, searchTerm)}
+                                            {msg.edited_at && (
+                                                <span className="text-[10px] opacity-60 ml-1">(edited)</span>
+                                            )}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
                             <div className="flex flex-col mt-1 mb-1 max-w-[280px] sm:max-w-[320px] min-w-[120px]">
                                 <div 
                                     className="relative group/image bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden w-full transition-all duration-200"
@@ -464,7 +548,7 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                                     </p>
                                 )}
                             </div>
-                        ) : (
+                        )) : (
                             <div className={`pr-2 ${!isMe && isAi ? 'markdown-content' : 'pr-6'}`}>
                                 {isAi && !isMe ? (
                                     <ReactMarkdown
@@ -793,6 +877,22 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
         }
     }
 
+    const handleImageClick = (msg, index = 0) => {
+        // Collect all images from message
+        let images = [];
+        if (msg.attachments && msg.attachments.length > 0) {
+            images = msg.attachments.map(a => ({ src: a.url, caption: msg.caption }));
+        } else {
+            // Fallback
+             images = [{ src: msg.image_url, caption: msg.caption }];
+        }
+
+        setViewingImage({
+            images,
+            startIndex: index
+        });
+    };
+
     useEffect(() => {
         shouldScrollToBottom.current = true;
     }, [roomId]);
@@ -938,8 +1038,8 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
             >
                 {viewingImage && (
                     <ImageViewerModal 
-                        imageUrl={viewingImage.image_url} 
-                        caption={viewingImage.caption} 
+                        images={viewingImage.images}
+                        startIndex={viewingImage.startIndex}
                         onClose={() => setViewingImage(null)} 
                     />
                 )}
@@ -1017,7 +1117,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onRegenerate={onRegenerate}
                             searchTerm={searchTerm} // [MODIFIED] Pass search term
                             scrollToMessage={scrollToMessage} // [NEW] Pass scrollToMessage
-                            onImageClick={(m) => setViewingImage(m)} // [NEW] Pass handler
+                            onImageClick={handleImageClick} // [NEW] Pass handler
                         />
                     );
                 })}

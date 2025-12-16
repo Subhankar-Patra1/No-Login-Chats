@@ -24,6 +24,7 @@ export default function Dashboard() {
     const [showJoinModal, setShowJoinModal] = useState(false);
 
     const [showGroupInfo, setShowGroupInfo] = useState(false);
+    const [highlightMessageId, setHighlightMessageId] = useState(null); // [NEW] Highlight message
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const activeRoomRef = useRef(null);
     
@@ -250,6 +251,18 @@ export default function Dashboard() {
             if (activeRoomRef.current && String(activeRoomRef.current.id) === String(roomId)) {
                 setActiveRoom(null);
             }
+        });
+
+        // [NEW] Refresh rooms if last message is deleted (for everyone)
+        newSocket.on('message_deleted', ({ messageId, roomId }) => {
+             // Check if the deleted message was the last one shown in sidebar
+             // determining from current state is hard inside callback due to closure
+             // But setRooms(prev => ...) gives access to latest.
+             // However, to trigger fetchRooms(), we need to call it.
+             // We can just call fetchRooms(). It's debounced/throttled or just safe enough.
+             // But let's check rooms state first if possible.
+             // Actually, simplest is just to refresh.
+             fetchRooms();
         });
 
         // [NEW] Force refresh rooms list (fallback for syncing)
@@ -533,6 +546,15 @@ export default function Dashboard() {
         }
     };
 
+    // [NEW] Handle Go To Message
+    const handleGoToMessage = (messageId) => {
+        setShowGroupInfo(false);
+        setHighlightMessageId(messageId);
+        // Reset after a delay so it can be re-triggered if needed, 
+        // essentially handled by the consumer clearing it or just change detection
+        setTimeout(() => setHighlightMessageId(null), 2000); 
+    };
+
     return (
         <PresenceProvider socket={socket}>
             <AiChatProvider socket={socket}>
@@ -592,6 +614,8 @@ export default function Dashboard() {
                             onBack={() => setActiveRoom(null)}
                             showGroupInfo={showGroupInfo}
                             setShowGroupInfo={setShowGroupInfo}
+                            highlightMessageId={highlightMessageId} // [NEW]
+                            onGoToMessage={handleGoToMessage} // [NEW]
                         />
                     )
                 ) : (
@@ -692,6 +716,7 @@ export default function Dashboard() {
                     room={activeRoom} 
                     socket={socket}
                     onClose={() => setShowGroupInfo(false)}
+                    onGoToMessage={handleGoToMessage} // [NEW]
                     onLeave={async () => {
                          if (!confirm('Are you sure you want to leave this group?')) return;
                          try {
