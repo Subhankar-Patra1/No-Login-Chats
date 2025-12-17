@@ -48,7 +48,7 @@ export default function CreateRoomModal({ onClose, onCreate }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 transition-colors duration-300">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 transition-colors duration-300 p-4">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 shadow-2xl animate-modal-scale transition-colors">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white">Create New Room</h3>

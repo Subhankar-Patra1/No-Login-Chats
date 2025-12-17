@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext'; // [NEW]
 import { renderTextWithEmojis } from '../utils/emojiRenderer';
@@ -102,6 +102,102 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
          }
     };
 
+    // Touch state ref to avoid frequent re-renders during gesture
+    const touchRef = useRef({
+        lastDist: 0,
+        startDist: 0,
+        startX: 0,
+        startY: 0,
+        moveX: 0,
+        moveY: 0,
+        isPinching: false,
+        isPanning: false
+    });
+
+    const getDistance = (touches) => {
+        return Math.hypot(
+            touches[0].clientX - touches[1].clientX,
+            touches[0].clientY - touches[1].clientY
+        );
+    };
+
+    const handleTouchStart = (e) => {
+        if (e.touches.length === 2) {
+            // Pinch Start
+            const dist = getDistance(e.touches);
+            touchRef.current.startDist = dist;
+            touchRef.current.lastDist = dist;
+            touchRef.current.isPinching = true;
+        } else if (e.touches.length === 1) {
+            // Pan/Swipe Start
+            touchRef.current.startX = e.touches[0].clientX;
+            touchRef.current.startY = e.touches[0].clientY;
+            touchRef.current.isPanning = true;
+            
+            if (scale > 1) {
+                setStartPos({ 
+                    x: e.touches[0].clientX - position.x, 
+                    y: e.touches[0].clientY - position.y 
+                });
+            }
+        }
+    };
+
+    const handleTouchMove = (e) => {
+        if (e.touches.length === 2 && touchRef.current.isPinching) {
+            // Pinch Move
+            const dist = getDistance(e.touches);
+            // Calculate scale change based on distance ratio
+            // Sensitivity factor 0.005 is roughly uniform
+            const delta = dist - touchRef.current.lastDist; 
+            touchRef.current.lastDist = dist;
+
+            setScale(prev => {
+                const newScale = prev + (delta * 0.005);
+                return Math.min(Math.max(1, newScale), 5);
+            });
+            e.preventDefault(); // Prevent default browser zoom
+        } else if (e.touches.length === 1 && touchRef.current.isPanning) {
+            if (scale > 1) {
+                // Pan
+                const x = e.touches[0].clientX - startPos.x;
+                const y = e.touches[0].clientY - startPos.y;
+                setPosition({ x, y });
+                e.preventDefault();
+            } else {
+                 // Track Swipe (no visual feedback yet, just logic)
+                 touchRef.current.moveX = e.touches[0].clientX;
+                 touchRef.current.moveY = e.touches[0].clientY;
+            }
+        }
+    };
+
+    const handleTouchEnd = (e) => {
+        if (touchRef.current.isPinching && e.touches.length < 2) {
+            touchRef.current.isPinching = false;
+        }
+        
+        if (touchRef.current.isPanning && !touchRef.current.isPinching) {
+            touchRef.current.isPanning = false;
+            
+            // Check for swipe if scale is 1
+            if (scale === 1 && touchRef.current.moveX !== 0) {
+                const diffX = touchRef.current.startX - touchRef.current.moveX; // +ve means swipe left (next)
+                const diffY = touchRef.current.startY - touchRef.current.moveY;
+                
+                // Threshold for swipe
+                if (Math.abs(diffX) > 50 && Math.abs(diffY) < 50) {
+                    if (diffX > 0) handleNext(e);
+                    else handlePrev(e);
+                }
+            }
+            
+            // Reset move tracking
+            touchRef.current.moveX = 0;
+            touchRef.current.moveY = 0;
+        }
+    };
+
     // Keyboard navigation
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -121,7 +217,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
 
     return createPortal(
         <div 
-            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col animate-in fade-in duration-200 select-none"
+            className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col animate-in fade-in duration-200 select-none h-[100dvh]" // h-100dvh for mobile
             onClick={onClose} 
         >
             {/* Header */}
@@ -129,7 +225,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                  <div className="flex items-center gap-4 pointer-events-auto">
                      <button
                         onClick={(e) => { e.stopPropagation(); onClose(); }}
-                        className="p-2 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                        className="p-3 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors" // Larger touch target
                      >
                          <span className="material-symbols-outlined text-[24px]">arrow_back</span>
                      </button>
@@ -187,7 +283,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                             e.stopPropagation(); 
                             handleDownload();
                         }}
-                        className="p-2 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                        className="p-3 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors" // Larger target
                         title="Download"
                      >
                          <span className="material-symbols-outlined text-[24px]">download</span>
@@ -195,20 +291,20 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                  </div>
             </div>
 
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons - Hidden on Touch Devices (optional, but good for cleanliness if swipe works) - Keeping visible for now but maybe adapt based on user agent or just CSS */}
             {imageList.length > 1 && (
                 <>
                     <button
                         onClick={handlePrev}
                         disabled={currentIndex === 0}
-                        className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 hover:bg-black/60 text-white transition-all z-50 pointer-events-auto ${currentIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                        className={`absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 hover:bg-black/60 text-white transition-all z-50 pointer-events-auto hidden md:flex ${currentIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
                     >
                         <span className="material-symbols-outlined text-[32px]">chevron_left</span>
                     </button>
                     <button
                         onClick={handleNext}
                         disabled={currentIndex === imageList.length - 1}
-                        className={`absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 hover:bg-black/60 text-white transition-all z-50 pointer-events-auto ${currentIndex === imageList.length - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                        className={`absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/40 hover:bg-black/60 text-white transition-all z-50 pointer-events-auto hidden md:flex ${currentIndex === imageList.length - 1 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
                     >
                         <span className="material-symbols-outlined text-[32px]">chevron_right</span>
                     </button>
@@ -223,16 +319,20 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 <img 
                     src={imgSrc} 
                     alt={imgAlt} 
-                    className="max-w-full max-h-full object-contain transition-transform duration-75 ease-linear origin-center"
+                    className="max-w-full max-h-full object-contain transition-transform duration-75 ease-linear origin-center touch-none" // touch-none is key
                     style={{ 
                         transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
                         cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
                     }}
                     onClick={(e) => e.stopPropagation()} 
+                    draggable={false} // Prevent native drag
                 />
             </div>
 
@@ -242,7 +342,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                     className="absolute bottom-0 left-0 right-0 p-6 bg-black/60 text-white text-center backdrop-blur-sm z-50 transition-opacity pointer-events-auto"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <p className="text-base font-medium whitespace-pre-wrap">
+                    <p className="text-base font-medium whitespace-pre-wrap max-h-[30vh] overflow-y-auto">
                         {linkifyText(imgAlt)}
                     </p>
                 </div>

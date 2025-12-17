@@ -440,10 +440,11 @@ const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetr
                             ) : (
                             <div className="flex flex-col mt-1 mb-1 max-w-[280px] sm:max-w-[320px] min-w-[120px]">
                                 <div 
-                                    className="relative group/image bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden w-full transition-all duration-200"
+                                    className="relative group/image bg-slate-200 dark:bg-slate-700 rounded-xl overflow-hidden w-full transition-all duration-200"
                                     style={{
                                         aspectRatio: (msg.image_width && msg.image_height) ? `${msg.image_width} / ${msg.image_height}` : '1 / 1',
-                                        width: msg.image_width ? `${Math.min(msg.image_width, 320)}px` : '100%',
+                                        width: '100%',
+                                        maxWidth: msg.image_width ? `${Math.min(msg.image_width, 320)}px` : '100%',
                                         maxHeight: '600px'
                                     }}
                                 >

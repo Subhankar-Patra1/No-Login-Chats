@@ -78,7 +78,7 @@ export default function LockScreen() {
     if (!isLocked) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#2a3e59] via-slate-950 to-black flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#2a3e59] via-slate-950 to-black flex flex-col items-center justify-center p-4 h-[100dvh] touch-none">
             <div className={`w-full max-w-sm flex flex-col items-center gap-8 ${isShaking ? 'animate-shake' : ''}`}>
                 
                 {/* User Info */}
@@ -99,7 +99,7 @@ export default function LockScreen() {
                 </div>
 
                 {/* Passcode Inputs */}
-                <div className={`flex gap-4 ${error ? 'animate-shake' : ''}`}>
+                <div className={`flex gap-4 sm:gap-6 ${error ? 'animate-shake' : ''}`}>
                     {passcode.map((digit, i) => (
                         <input
                             key={i}
@@ -109,7 +109,7 @@ export default function LockScreen() {
                             value={digit}
                             onChange={(e) => handleInput(i, e.target.value)}
                             onKeyDown={(e) => handleKeyDown(i, e)}
-                            className={`w-14 h-14 rounded-full bg-slate-800 border-2 text-center text-2xl font-bold text-white focus:outline-none transition-all ${
+                            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800 border-2 text-center text-2xl font-bold text-white focus:outline-none transition-all ${
                                 error 
                                 ? 'border-red-500 focus:border-red-500' 
                                 : 'border-slate-700 focus:border-violet-500 focus:shadow-[0_0_20px_rgba(139,92,246,0.3)]'

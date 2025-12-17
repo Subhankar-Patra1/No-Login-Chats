@@ -410,7 +410,7 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
 
     if (loading) {
         return createPortal(
-            <div className="fixed inset-y-0 right-0 w-[360px] bg-white dark:bg-slate-900 shadow-2xl z-[60] flex items-center justify-center border-l border-slate-200 dark:border-slate-800 transition-colors duration-300">
+            <div className="fixed inset-y-0 right-0 w-full md:w-[360px] bg-white dark:bg-slate-900 shadow-2xl z-[60] flex items-center justify-center border-l border-slate-200 dark:border-slate-800 transition-colors duration-300">
                 <div className="animate-spin w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full"></div>
             </div>,
             document.body
@@ -545,7 +545,7 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                                             <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
                                         </button>
                                          {showEmoji && emojiTarget === 'name' && (
-                                            <div className="absolute top-full right-[-24px] mt-3 z-[100] shadow-2xl shadow-violet-500/10 rounded-2xl w-[320px] h-[400px] overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-left font-normal animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="absolute top-full right-[-24px] mt-3 z-[100] shadow-2xl shadow-violet-500/10 rounded-2xl w-[min(320px,90vw)] h-[400px] overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-left font-normal animate-in fade-in slide-in-from-top-2 duration-200">
                                                 <PickerPanel 
                                                     onEmojiClick={(emojiData, event) => {
                                                          handleEmojiGeneric(emojiData, 'name');
@@ -736,7 +736,7 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                                             <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
                                         </button>
                                          {showEmoji && emojiTarget === 'bio' && (
-                                            <div className="absolute top-full left-0 mt-2 z-50 shadow-2xl rounded-lg w-[320px] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                                            <div className="absolute top-full left-0 mt-2 z-50 shadow-2xl rounded-lg w-[min(320px,90vw)] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
                                                 <PickerPanel 
                                                     onEmojiClick={handleEmojiClick}
                                                     disableGifTab={true}

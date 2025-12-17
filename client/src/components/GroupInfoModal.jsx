@@ -505,7 +505,7 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
                 aspect={1}
             />
 
-            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[90vh] animate-modal-scale transition-colors overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 w-full h-full md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-2xl border-0 md:border md:border-slate-200 md:dark:border-slate-800 shadow-2xl flex flex-col animate-modal-scale transition-colors overflow-hidden">
                 {/* Header */}
                 <div className="p-6 border-b border-slate-200/50 dark:border-slate-800/50 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50 transition-colors">
                     <div className="flex items-center gap-4">
@@ -599,7 +599,7 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
                                             </button>
 
                                             {showNameEmoji && (
-                                                <div className="absolute top-full right-0 mt-2 z-50 shadow-2xl rounded-lg w-[320px] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 animate-scale-up origin-top-right">
+                                                <div className="absolute top-full right-0 mt-2 z-50 shadow-2xl rounded-lg w-[min(320px,90vw)] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 animate-scale-up origin-top-right">
                                                     <PickerPanel 
                                                         onEmojiClick={handleNameEmojiClick}
                                                         disableGifTab={true}
@@ -743,7 +743,7 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
                                             <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
                                         </button>
                                          {showEmoji && (
-                                            <div className="absolute top-full left-0 mt-2 z-50 shadow-2xl rounded-lg w-[320px] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700">
+                                            <div className="absolute top-full left-0 mt-2 z-50 shadow-2xl rounded-lg w-[min(320px,90vw)] h-[400px] overflow-hidden border border-slate-200 dark:border-slate-700">
                                                 <PickerPanel 
                                                     onEmojiClick={handleEmojiClick}
                                                     disableGifTab={true}
