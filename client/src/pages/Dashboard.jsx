@@ -66,6 +66,7 @@ export default function Dashboard() {
     const [highlightMessageId, setHighlightMessageId] = useState(null); // [NEW] Highlight message
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const activeRoomRef = useRef(null);
+    const canNotifyRef = useRef(canNotify); // Track current notification state for socket handler
     
     // Resize Logic
     const [sidebarWidth, setSidebarWidth] = useState(288); // Default w-72 (288px)
@@ -100,6 +101,11 @@ export default function Dashboard() {
             return timeB - timeA;
         });
     };
+
+    // Keep canNotifyRef in sync with canNotify (fixes stale closure in socket handler)
+    useEffect(() => {
+        canNotifyRef.current = canNotify;
+    }, [canNotify]);
 
     const startResizing = useCallback(() => setIsResizing(true), []);
     const stopResizing = useCallback(() => setIsResizing(false), []);
@@ -211,7 +217,7 @@ export default function Dashboard() {
                 const isTabHidden = document.hidden;
                 const isDifferentRoom = activeRoomRef.current?.id !== msg.room_id;
                 
-                if (canNotify && (isTabHidden || isDifferentRoom)) {
+                if (canNotifyRef.current && (isTabHidden || isDifferentRoom)) {
                     // Get room info
                     const senderRoom = rooms.find(r => String(r.id) === String(msg.room_id));
                     
