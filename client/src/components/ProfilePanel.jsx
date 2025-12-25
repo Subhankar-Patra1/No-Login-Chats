@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePresence } from '../context/PresenceContext';
+import { useNotification } from '../context/NotificationContext';
 import StatusDot from './StatusDot';
 import AvatarEditorModal from './AvatarEditorModal';
 import PasscodeSettingsModal from './PasscodeSettingsModal';
@@ -28,6 +29,13 @@ const timeAgo = (dateString) => {
 export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess, onGoToMessage }) {
     const { token, user: currentUser, updateUser, logout } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
+    const { 
+        isSupported: notificationsSupported, 
+        permission: notificationPermission, 
+        enabled: notificationsEnabled, 
+        toggleEnabled: toggleNotifications,
+        requestPermission 
+    } = useNotification();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showFullBio, setShowFullBio] = useState(false);
@@ -884,6 +892,42 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                                     <span className="material-symbols-outlined text-slate-400 dark:text-slate-500">lock</span>
                                     <span className="text-sm font-medium">App Lock</span>
                                 </button>
+
+                                {/* Notification Settings */}
+                                {notificationsSupported && (
+                                    <button 
+                                        onClick={async () => {
+                                            if (notificationPermission === 'default') {
+                                                await requestPermission();
+                                            } else {
+                                                toggleNotifications();
+                                            }
+                                        }}
+                                        className="w-full flex items-center justify-between gap-4 p-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors text-left"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <span className={`material-symbols-outlined ${notificationPermission === 'granted' && notificationsEnabled ? 'text-violet-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                {notificationPermission === 'granted' && notificationsEnabled ? 'notifications_active' : 'notifications_off'}
+                                            </span>
+                                            <div>
+                                                <span className="text-sm font-medium block">Desktop Notifications</span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {notificationPermission === 'denied' 
+                                                        ? 'Blocked by browser' 
+                                                        : notificationPermission === 'default'
+                                                            ? 'Click to enable'
+                                                            : notificationsEnabled ? 'On' : 'Off'
+                                                    }
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {notificationPermission === 'granted' && (
+                                            <div className={`w-10 h-6 rounded-full p-1 transition-colors ${notificationsEnabled ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
+                                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${notificationsEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                                            </div>
+                                        )}
+                                    </button>
+                                )}
 
                                 <button 
                                     onClick={() => setConfirmModal({ 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import AIChatWindow from '../components/AIChatWindow';
@@ -7,6 +8,7 @@ import CreateRoomModal from '../components/CreateRoomModal';
 import JoinRoomModal from '../components/JoinRoomModal';
 import GroupInfoModal from '../components/GroupInfoModal';
 import LogoutModal from '../components/LogoutModal';
+import NotificationPermissionBanner from '../components/NotificationPermissionBanner';
 import io from 'socket.io-client';
 import { PresenceProvider } from '../context/PresenceContext';
 
@@ -14,8 +16,45 @@ import { AiChatProvider } from '../context/AiChatContext';
 import notificationSound from '../assets/notification.ogg';
 import sentSound from '../assets/sent.ogg';
 
+// Helper to strip emoji characters from text (for clean notification display)
+const stripEmojis = (text) => {
+    if (!text) return '';
+    // Remove emoji characters (Unicode ranges for emojis)
+    return text
+        .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F02F}]|[\u{1F0A0}-\u{1F0FF}]|[\u{1F100}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{231A}-\u{231B}]|[\u{23E9}-\u{23F3}]|[\u{23F8}-\u{23FA}]|[\u{25AA}-\u{25AB}]|[\u{25B6}]|[\u{25C0}]|[\u{25FB}-\u{25FE}]|[\u{2614}-\u{2615}]|[\u{2648}-\u{2653}]|[\u{267F}]|[\u{2693}]|[\u{26A1}]|[\u{26AA}-\u{26AB}]|[\u{26BD}-\u{26BE}]|[\u{26C4}-\u{26C5}]|[\u{26CE}]|[\u{26D4}]|[\u{26EA}]|[\u{26F2}-\u{26F3}]|[\u{26F5}]|[\u{26FA}]|[\u{26FD}]|[\u{2702}]|[\u{2705}]|[\u{2708}-\u{270D}]|[\u{270F}]|[\u{2712}]|[\u{2714}]|[\u{2716}]|[\u{271D}]|[\u{2721}]|[\u{2728}]|[\u{2733}-\u{2734}]|[\u{2744}]|[\u{2747}]|[\u{274C}]|[\u{274E}]|[\u{2753}-\u{2755}]|[\u{2757}]|[\u{2763}-\u{2764}]|[\u{2795}-\u{2797}]|[\u{27A1}]|[\u{27B0}]|[\u{27BF}]|[\u{2934}-\u{2935}]|[\u{2B05}-\u{2B07}]|[\u{2B1B}-\u{2B1C}]|[\u{2B50}]|[\u{2B55}]|[\u{3030}]|[\u{303D}]|[\u{3297}]|[\u{3299}]|[\u{FE0F}]/gu, '')
+        .trim();
+};
+
+// Helper to generate notification preview text
+const getMessagePreview = (msg) => {
+    // If there's content, try to show it regardless of type
+    if (msg.content) {
+        // Strip only HTML tags, keep emojis
+        const text = (msg.content.replace(/<[^>]*>/g, '') || '').trim();
+        if (text) {
+            return text.length > 80 ? text.slice(0, 80) + '...' : text;
+        }
+    }
+    
+    // Fallback based on type
+    switch(msg.type) {
+        case 'text': return 'Message';
+        case 'image': return msg.caption || 'Photo';
+        case 'video': return msg.caption || 'Video';
+        case 'audio': return 'Voice message';
+        case 'file': return msg.file_name || 'Document';
+        case 'gif': return 'GIF';
+        case 'sticker': return 'Sticker';
+        default: return msg.caption || 'New message';
+    }
+};
+
+
+
+
 export default function Dashboard() {
     const { user, token, logout, updateUser } = useAuth();
+    const { showNotification, canNotify } = useNotification();
     const [rooms, setRooms] = useState([]);
     const [activeRoom, setActiveRoom] = useState(null);
     const [loadingRoomId, setLoadingRoomId] = useState(null); // [NEW] Loading state for chat switching
@@ -167,6 +206,48 @@ export default function Dashboard() {
             if (msg.user_id !== user.id) {
                 const audio = new Audio(notificationSound);
                 audio.play().catch(e => console.log("Audio play error:", e));
+                
+                // [NEW] Show desktop notification if tab is hidden or different room
+                const isTabHidden = document.hidden;
+                const isDifferentRoom = activeRoomRef.current?.id !== msg.room_id;
+                
+                if (canNotify && (isTabHidden || isDifferentRoom)) {
+                    // Get room info
+                    const senderRoom = rooms.find(r => String(r.id) === String(msg.room_id));
+                    
+                    // Don't show notifications for archived chats
+                    if (senderRoom?.is_archived) {
+                        return;
+                    }
+                    
+                    // Get sender name (keep emojis for display)
+                    const senderName = msg.display_name || msg.username || 'Someone';
+                    
+                    let title;
+                    if (senderRoom && senderRoom.type === 'group') {
+                        // For groups: "PersonName @GroupName"
+                        const groupName = senderRoom.name || 'Group';
+                        title = `${senderName} @${groupName}`;
+                    } else {
+                        // For DMs: "@PersonName"
+                        title = `@${senderName}`;
+                    }
+                    
+                    showNotification(title, {
+                        body: getMessagePreview(msg),
+                        icon: msg.avatar_thumb_url || senderRoom?.avatar_thumb_url || '/logo.png',
+                        badge: '/logo.png', // App badge icon (website logo)
+                        tag: `room-${msg.room_id}`, // Group by room
+                        data: { roomId: msg.room_id },
+                        onClick: (data) => {
+                            // Find and select the room
+                            const targetRoom = rooms.find(r => String(r.id) === String(data.roomId));
+                            if (targetRoom) {
+                                handleSelectRoom(targetRoom);
+                            }
+                        }
+                    });
+                }
             } else {
                 // [NEW] Play sent sound
                 const audio = new Audio(sentSound);
@@ -619,6 +700,9 @@ export default function Dashboard() {
     return (
         <PresenceProvider socket={socket}>
             <AiChatProvider socket={socket}>
+        {/* Notification Permission Banner */}
+        <NotificationPermissionBanner />
+        
         <div className={`fixed inset-0 h-[100dvh] w-full bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden flex ${isResizing ? 'select-none cursor-col-resize' : ''} animate-dashboard-entry transition-colors`}>
             {/* Mobile: Sidebar hidden if activeRoom exists. Desktop: Always visible */}
             <div 
