@@ -5,8 +5,13 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import ProfilePanel from './ProfilePanel';
 import ImagePreviewModal from './ImagePreviewModal';
-import FilePreviewModal from './FilePreviewModal'; // [NEW]
+import FilePreviewModal from './FilePreviewModal';
+import PinnedMessagesPanel from './PinnedMessagesPanel';
+import LocationPicker from './LocationPicker';
+import CreatePollModal from './CreatePollModal';
+import PinDurationModal from './PinDurationModal';
 import { linkifyText } from '../utils/linkify';
+import { renderTextWithEmojis } from '../utils/emojiRenderer';
 
 const timeAgo = (dateString) => {
     if (!dateString) return '';
@@ -98,7 +103,10 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const [editingMessage, setEditingMessage] = useState(null);
     const [typingUsers, setTypingUsers] = useState([]);
     const [selectedImages, setSelectedImages] = useState(null);
-    const [selectedFiles, setSelectedFiles] = useState(null); // [NEW] Scoped File Preview State
+    const [selectedFiles, setSelectedFiles] = useState(null);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
+    const [showCreatePoll, setShowCreatePoll] = useState(false);
+    const [pinToConfirm, setPinToConfirm] = useState(null);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
 
@@ -126,7 +134,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                      is_view_once: original.is_view_once,
                      audio_duration_ms: original.audio_duration_ms,
                      file_name: original.file_name,
-                     caption: original.caption
+                     caption: original.caption,
+                     poll_question: original.poll?.question
                  }
              };
         });
@@ -308,7 +317,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                                 audio_duration_ms: original.audio_duration_ms,
                                 is_view_once: original.is_view_once,
                                 file_name: original.file_name,
-                                caption: original.caption
+                                caption: original.caption,
+                                poll_question: original.poll?.question
                             };
                         }
                     }
@@ -431,12 +441,74 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         socket.on('typing:start', handleTypingStart);
         socket.on('typing:stop', handleTypingStop);
 
+        // [NEW] Pin Events
+        socket.on('message_pinned', ({ messageId, roomId, pinnedBy }) => {
+             if (String(roomId) === String(room.id)) {
+                 setMessages(prev => prev.map(m => 
+                     m.id === messageId ? { ...m, is_pinned: true, pinned_by: pinnedBy } : m
+                 ));
+             }
+        });
+
+        socket.on('message_unpinned', ({ messageId, roomId }) => {
+             if (String(roomId) === String(room.id)) {
+                 setMessages(prev => prev.map(m => 
+                     m.id === messageId ? { ...m, is_pinned: false, pinned_by: null } : m
+                 ));
+             }
+        });
+
 
         socket.on('chat:cleared', ({ roomId }) => {
             if (String(roomId) === String(room.id)) {
                 setMessages([]); 
             }
         });
+
+        // Poll vote update - use named handler so cleanup doesn't remove Dashboard's listener
+        const handlePollVote = (data) => {
+            const { pollId, roomId, poll, voterId, voterName, pollQuestion, hasVoted } = data;
+            if (String(roomId) === String(room.id)) {
+                setMessages(prev => prev.map(msg => {
+                    if (msg.poll && msg.poll.id === pollId) {
+                        // FIX: The poll object from the server contains user_votes relative to the VOTER.
+                        // If we blindly replace msg.poll with poll, we overwrite our own vote state with the voter's state.
+                        // So, we must only update user_votes if WE are the voter.
+                        // Otherwise, we keep our existing user_votes and only update the counts/options.
+                        
+                        let myUserVotes = msg.poll.user_votes;
+                        if (String(voterId) === String(user.id)) {
+                             // If I voted, the server's poll data has my correct new votes
+                             myUserVotes = poll.user_votes;
+                        } 
+                        // Else: keep my existing votes (myUserVotes remains msg.poll.user_votes)
+
+                        return { 
+                            ...msg, 
+                            poll: {
+                                ...poll,
+                                user_votes: myUserVotes
+                            }
+                        };
+                    }
+                    return msg;
+                }));
+            }
+        };
+        socket.on('poll_vote', handlePollVote);
+
+        // Poll closed - use named handler for proper cleanup
+        const handlePollClosed = ({ pollId, roomId, poll }) => {
+            if (String(roomId) === String(room.id)) {
+                setMessages(prev => prev.map(msg => {
+                    if (msg.poll && msg.poll.id === pollId) {
+                        return { ...msg, poll };
+                    }
+                    return msg;
+                }));
+            }
+        };
+        socket.on('poll_closed', handlePollClosed);
 
         // [NEW] Update messages when a user changes their display name
         const handleProfileUpdate = ({ userId, display_name }) => {
@@ -466,6 +538,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             socket.off('typing:stop', handleTypingStop);
             socket.off('message_viewed', handleMessageViewed);
             socket.off('chat:cleared'); 
+            socket.off('poll_vote', handlePollVote);
+            socket.off('poll_closed', handlePollClosed);
             socket.off('user:profile:updated', handleProfileUpdate);
             
             Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
@@ -671,9 +745,32 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         if (typingUsers.length === 0) return null;
         if (room.type === 'direct') return "is typing...";
         
-        if (typingUsers.length === 1) return `${typingUsers[0].name} is typing...`;
-        if (typingUsers.length === 2) return `${typingUsers[0].name} and ${typingUsers[1].name} are typing...`;
-        return `${typingUsers[0].name}, ${typingUsers[1].name}, and ${typingUsers.length - 2} others are typing...`;
+        if (typingUsers.length === 1) {
+            return (
+                <span className="truncate max-w-[200px] flex items-center gap-1">
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span> 
+                    <span className="shrink-0">is typing...</span>
+                </span>
+            );
+        }
+        if (typingUsers.length === 2) {
+            return (
+                <span className="truncate max-w-[300px] flex items-center gap-1">
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span> 
+                    <span className="shrink-0">and</span>
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name)}</span> 
+                    <span className="shrink-0">are typing...</span>
+                </span>
+            );
+        }
+        return (
+            <span className="truncate max-w-[300px] flex items-center gap-1">
+                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span>
+                <span className="shrink-0">,</span>
+                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name)}</span>
+                <span className="shrink-0">, and {typingUsers.length - 2} others are typing...</span>
+            </span>
+        );
     };
 
     const extractTextFromHtml = (html) => {
@@ -1285,6 +1382,25 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 )}
             </div>
 
+            {/* [NEW] Pinned Messages Panel */}
+            <PinnedMessagesPanel 
+                roomId={room.id}
+                onGoToMessage={(msgId) => {
+                    const el = document.getElementById(`msg-${msgId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        el.classList.add('reply-highlight');
+                        setTimeout(() => el.classList.remove('reply-highlight'), 2000);
+                    }
+                }}
+                onUnpin={(msgId) => {
+                    setMessages(prev => prev.map(m => 
+                        m.id === msgId ? { ...m, is_pinned: false } : m
+                    ));
+                }}
+                socket={socket}
+            />
+
             {isLoading ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 z-10">
                      <span className="material-symbols-outlined text-4xl animate-spin text-violet-500">progress_activity</span>
@@ -1301,6 +1417,24 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     onDelete={handleLocalDelete}
                     onRetry={handleRetry} 
                     onEdit={setEditingMessage}
+                    onPin={(msg) => {
+                        if (msg.is_pinned) {
+                            // Unpin directly
+                            fetch(
+                                `${import.meta.env.VITE_API_URL}/api/messages/${msg.id}/pin`,
+                                { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+                            ).then(res => {
+                                if (res.ok) {
+                                    setMessages(prev => prev.map(m => 
+                                        m.id === msg.id ? { ...m, is_pinned: false } : m
+                                    ));
+                                }
+                            }).catch(console.error);
+                        } else {
+                            // Show duration modal for pinning
+                            setPinToConfirm(msg);
+                        }
+                    }}
                     searchTerm={searchTerm} 
                     onLoadMore={handleLoadOlderMessages}
                     hasMore={hasMore}
@@ -1327,6 +1461,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     onImageSelected={handleImageSelected}
                     onFileSelected={handleFileSelected}
                     onSendGif={handleSendGif}
+                    onLocationClick={() => setShowLocationPicker(true)}
+                    onPollClick={() => setShowCreatePoll(true)}
                     disabled={!canSend || isExpired}
                     replyTo={replyTo}          
                     setReplyTo={setReplyTo}
@@ -1338,6 +1474,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     onTypingStop={() => socket?.emit('typing:stop', { roomId: room.id })}
                     members={members}
                     currentUser={user}
+                    roomId={room.id}
                 />
             ) : (
                 <div className="p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 z-10 flex justify-center items-center h-[88px] transition-colors duration-300">
@@ -1398,6 +1535,117 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     />
                 </div>
             )}
+
+            {/* [NEW] Location Picker Modal */}
+            <LocationPicker 
+                isOpen={showLocationPicker}
+                onClose={() => setShowLocationPicker(false)}
+                onSend={async (location) => {
+                    const tempId = `temp-${Date.now()}`;
+                    const tempMsg = {
+                        id: tempId,
+                        room_id: room.id,
+                        user_id: user.id,
+                        type: 'location',
+                        content: location.address || 'Location',
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                        address: location.address,
+                        created_at: new Date().toISOString(),
+                        username: user.username,
+                        display_name: user.display_name,
+                        status: 'sending'
+                    };
+                    setMessages(prev => [...prev, tempMsg]);
+
+                    try {
+                        await fetch(`${import.meta.env.VITE_API_URL}/api/messages`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                room_id: room.id,
+                                type: 'location',
+                                latitude: location.latitude,
+                                longitude: location.longitude,
+                                address: location.address,
+                                tempId
+                            })
+                        });
+                    } catch (err) {
+                        console.error('Failed to send location:', err);
+                        setMessages(prev => prev.map(m => 
+                            m.id === tempId ? { ...m, status: 'error' } : m
+                        ));
+                    }
+                }}
+            />
+
+            {/* [NEW] Create Poll Modal */}
+            <CreatePollModal 
+                isOpen={showCreatePoll}
+                onClose={() => setShowCreatePoll(false)}
+                onSubmit={async (pollData) => {
+                    try {
+                        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/polls`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                room_id: room.id,
+                                ...pollData
+                            })
+                        });
+                        if (!res.ok) throw new Error('Failed to create poll');
+                    } catch (err) {
+                        console.error('Failed to create poll:', err);
+                        throw err;
+                    }
+                }}
+            />
+
+            {/* [NEW] Pin Duration Modal */}
+            <PinDurationModal 
+                isOpen={!!pinToConfirm}
+                onClose={() => setPinToConfirm(null)}
+                message={pinToConfirm}
+                onPin={async (msg, durationHours) => {
+                    // Optimistic update - show pinned immediately
+                    setMessages(prev => prev.map(m => 
+                        m.id === msg.id ? { ...m, is_pinned: true, pinned_by: user.id } : m
+                    ));
+                    
+                    try {
+                        const res = await fetch(
+                            `${import.meta.env.VITE_API_URL}/api/messages/${msg.id}/pin`,
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ durationHours })
+                            }
+                        );
+                        if (!res.ok) {
+                            // Revert on failure
+                            setMessages(prev => prev.map(m => 
+                                m.id === msg.id ? { ...m, is_pinned: false, pinned_by: null } : m
+                            ));
+                        }
+                    } catch (err) {
+                        console.error('Failed to pin:', err);
+                        // Revert on error
+                        setMessages(prev => prev.map(m => 
+                            m.id === msg.id ? { ...m, is_pinned: false, pinned_by: null } : m
+                        ));
+                    }
+                }}
+            />
         </div>
     );
 }

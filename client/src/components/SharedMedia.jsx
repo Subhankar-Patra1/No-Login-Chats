@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ImageViewerModal from './ImageViewerModal';
+import { SharedMediaSkeleton } from './SkeletonLoaders';
+import EmptyState from './EmptyState';
 
 export default function SharedMedia({ roomId, onGoToMessage }) {
     const { token, user: currentUser } = useAuth();
@@ -41,21 +43,23 @@ export default function SharedMedia({ roomId, onGoToMessage }) {
 
     const renderContent = () => {
         if (loading) {
-            return (
-                <div className="flex justify-center p-8">
-                    <span className="material-symbols-outlined animate-spin text-slate-400 text-2xl">progress_activity</span>
-                </div>
-            );
+            return <SharedMediaSkeleton count={activeTab === 'photos' ? 9 : 4} />;
         }
 
         if (media.length === 0) {
+            const emptyMessages = {
+                photos: 'No photos shared yet',
+                videos: 'No videos shared yet',
+                files: 'No files shared yet',
+                links: 'No links shared yet'
+            };
             return (
-                <div className="flex flex-col items-center justify-center p-8 text-slate-400 dark:text-slate-500">
-                    <span className="material-symbols-outlined text-[48px] opacity-20 mb-2">
-                        {tabs.find(t => t.id === activeTab).icon}
-                    </span>
-                    <p className="text-sm">No {activeTab} shared yet</p>
-                </div>
+                <EmptyState 
+                    icon={tabs.find(t => t.id === activeTab)?.icon || 'perm_media'}
+                    title={emptyMessages[activeTab]}
+                    description="Shared items will appear here"
+                    variant="media"
+                />
             );
         }
 

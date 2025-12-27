@@ -58,6 +58,7 @@ export default function Dashboard() {
     const [rooms, setRooms] = useState([]);
     const [activeRoom, setActiveRoom] = useState(null);
     const [loadingRoomId, setLoadingRoomId] = useState(null); // [NEW] Loading state for chat switching
+    const [isLoadingRooms, setIsLoadingRooms] = useState(true); // [NEW] Initial loading state
     const [socket, setSocket] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(false);
@@ -139,8 +140,9 @@ export default function Dashboard() {
         setShowGroupInfo(false); // Close group info modal when changing rooms
     }, [activeRoom]);
 
-    const fetchRooms = useCallback(async () => {
+    const fetchRooms = useCallback(async (showLoading = false) => {
         if (!token) return;
+        if (showLoading) setIsLoadingRooms(true);
         try {
             const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -153,12 +155,14 @@ export default function Dashboard() {
             }
         } catch (err) {
             console.error(err);
+        } finally {
+            setIsLoadingRooms(false);
         }
     }, [token]);
 
     // Fetch rooms on mount
     useEffect(() => {
-        fetchRooms();
+        fetchRooms(true); // Show loading skeleton on initial load
     }, [fetchRooms]);
 
     useEffect(() => {
@@ -167,7 +171,7 @@ export default function Dashboard() {
         });
 
         newSocket.on('connect', () => {
-            console.log('[DEBUG] Connected to socket via Dashboard', newSocket.id);
+
         });
 
         newSocket.on('connect_error', (err) => {
@@ -286,6 +290,8 @@ export default function Dashboard() {
                      room.last_message_is_view_once = msg.is_view_once; // [FIX] Update view once status
                      room.last_message_viewed_by = msg.viewed_by || []; // [FIX] Reset viewed by
                      room.last_message_file_name = msg.file_name; // [FIX] Update file name for preview
+                     room.last_message_sender_name = msg.display_name || msg.username; // [NEW] Update sender name for preview logic
+                     room.last_message_poll_question = msg.poll?.question || null; // [NEW] Update poll question for preview
                      room.last_message_at = new Date().toISOString(); // Update timestamp for sorting
 
                      updatedRooms[roomIndex] = room;
@@ -355,14 +361,12 @@ export default function Dashboard() {
 
         newSocket.on('chat:cleared', ({ roomId }) => {
             // Update rooms list
-             setRooms(prev => prev.map(r => 
+              setRooms(prev => prev.map(r => 
                 String(r.id) === String(roomId) ? { 
                     ...r, 
                     unread_count: 0, 
                     initialMessages: [],
                     last_message_content: null,
-                    last_message_type: null,
-                    last_message_sender_id: null,
                     last_message_type: null,
                     last_message_sender_id: null,
                     last_message_status: null,
@@ -404,6 +408,56 @@ export default function Dashboard() {
             fetchRooms();
         });
 
+        // [NEW] Poll vote - update chat list with "voted in" preview
+        // ChatWindow now uses named handlers so it won't remove this listener
+        newSocket.on('poll_vote', ({ roomId, pollId, poll, voterId, voterName, pollQuestion, hasVoted, lastMessage }) => {
+            // Clear the message cache for this room so fresh data is fetched when chat is opened
+            localStorage.removeItem(`chat_messages_${roomId}`);
+            
+            // Update sidebar preview
+            setRooms(currentRooms => {
+                const newRooms = currentRooms.map(room => {
+                    if (String(room.id) === String(roomId)) {
+                        // [FIX] Use authoritative lastMessage from server to correctly display "You voted" OR "Previous Message" (on unvote)
+                        if (lastMessage) {
+                                return {
+                                    ...room,
+                                    last_message_content: lastMessage.content,
+                                    last_message_type: lastMessage.type,
+                                    last_message_sender_id: lastMessage.sender_id,
+                                    last_message_sender_name: lastMessage.sender_name,
+                                    last_message_poll_question: lastMessage.poll_question,
+                                    // Use the message time, or fall back to now if missing (shouldn't be missing)
+                                    last_message_at: lastMessage.created_at || new Date().toISOString()
+                                };
+                        }
+
+                        // Fallback logic for legacy/compatibility
+                        if (hasVoted) {
+                            return {
+                                ...room,
+                                last_message_content: pollQuestion,
+                                last_message_type: 'poll_vote',
+                                last_message_sender_id: voterId,
+                                last_message_sender_name: voterName,
+                                last_message_poll_question: pollQuestion,
+                                last_message_at: new Date().toISOString()
+                            };
+                        } else {
+                            return {
+                                ...room,
+                                last_message_type: 'poll',
+                                last_message_poll_question: pollQuestion,
+                                last_message_sender_id: poll.created_by,
+                                last_message_sender_name: poll.creator_name
+                            };
+                        }
+                    }
+                    return room;
+                });
+                return sortRooms(newRooms);
+            });
+        });
         // [NEW] Group Avatar/Bio Updates
         newSocket.on('room:updated', (data) => {
             // data matches: { roomId, avatar_url, avatar_thumb_url, bio, etc }
@@ -489,7 +543,7 @@ export default function Dashboard() {
     useEffect(() => {
         if (!token) return;
 
-        console.log('Dashboard mounted/token changed. Fetching data...');
+
         fetchRooms();
 
         const handlePendingInvite = async () => {
@@ -724,6 +778,7 @@ export default function Dashboard() {
                     activeRoom={activeRoom} 
                     onSelectRoom={handleSelectRoom} // [MODIFIED] Use new handler
                     loadingRoomId={loadingRoomId}   // [NEW] Pass loading state
+                    isLoading={isLoadingRooms}      // [NEW] Pass initial loading state for skeletons
                     onCreateRoom={() => setShowCreateModal(true)}
                     onJoinRoom={() => setShowJoinModal(true)}
                     user={user}

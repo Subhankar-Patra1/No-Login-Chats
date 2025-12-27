@@ -11,8 +11,11 @@ import 'highlight.js/styles/atom-one-dark.css';
 import 'katex/dist/katex.min.css'; // [NEW]
 import SparkleLogo from './icons/SparkleLogo';
 import { renderTextWithEmojis } from '../utils/emojiRenderer';
-import { formatBytes } from '../utils/formatBytes'; // [NEW]
+import { formatBytes } from '../utils/formatBytes';
 import ImageViewerModal from './ImageViewerModal';
+import LocationMessage from './LocationMessage';
+import PollMessage from './PollMessage';
+import PollIcon from './icons/PollIcon';
 
 const formatDuration = (ms) => {
     if (!ms) return '0:00';
@@ -80,7 +83,7 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
 };
 
 
-export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate, searchTerm, scrollToMessage, onImageClick, token }) => { // [MODIFIED] Added token
+export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate, onPin, searchTerm, scrollToMessage, onImageClick, token }) => { // [MODIFIED] Added onPin
  // [MODIFIED] Added onImageClick
     const [showMenu, setShowMenu] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false); // [NEW] Feedback state
@@ -299,6 +302,11 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                             {msg.replyTo.file_name || "File"}
                                             {msg.replyTo.caption ? ` • ${msg.replyTo.caption}` : ''}
                                         </span>
+                                    </div>
+                                ) : msg.replyTo.type === 'poll' ? (
+                                    <div className="flex items-center gap-1 text-xs opacity-90">
+                                        <PollIcon className="w-[14px] h-[14px] shrink-0" />
+                                        <span className="truncate">{msg.replyTo.poll_question || 'Poll'}</span>
                                     </div>
                                 ) : (
                                     <div className="text-xs opacity-80 line-clamp-2 flex items-center gap-1">
@@ -757,6 +765,43 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                         </p>
                                     )}
                                 </div>
+                            ) : msg.type === 'location' ? (
+                                <LocationMessage 
+                                    latitude={parseFloat(msg.latitude)}
+                                    longitude={parseFloat(msg.longitude)}
+                                    address={msg.address}
+                                    isMe={isMe}
+                                />
+                            ) : msg.type === 'poll' && msg.poll ? (
+                                <PollMessage 
+                                    poll={msg.poll}
+                                    onVote={async (pollId, optionIds) => {
+                                        const token = localStorage.getItem('token');
+                                        const res = await fetch(
+                                            `${import.meta.env.VITE_API_URL}/api/polls/${pollId}/vote`,
+                                            {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    Authorization: `Bearer ${token}`
+                                                },
+                                                body: JSON.stringify({ optionIds })
+                                            }
+                                        );
+                                        if (!res.ok) throw new Error('Vote failed');
+                                    }}
+                                    onClose={async (pollId) => {
+                                        const token = localStorage.getItem('token');
+                                        await fetch(
+                                            `${import.meta.env.VITE_API_URL}/api/polls/${pollId}/close`,
+                                            {
+                                                method: 'POST',
+                                                headers: { Authorization: `Bearer ${token}` }
+                                            }
+                                        );
+                                    }}
+                                    isMe={isMe}
+                                />
                             ) : (
                             <div className={`pr-2 ${!isMe && isAi ? 'markdown-content' : 'pr-6'}`}>
                                 {isAi && !isMe ? (
@@ -924,7 +969,8 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                             file_name: msg.file_name,
                                             caption: msg.caption,
                                             audio_duration_ms: msg.audio_duration_ms,
-                                            is_view_once: msg.is_view_once
+                                            is_view_once: msg.is_view_once,
+                                            poll_question: msg.poll?.question
                                         });
                                         setShowMenu(false);
                                     }}
@@ -936,7 +982,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                             )}
 
                             {/* [NEW] Edit Option */}
-                            {isMe && !isAudio && msg.type !== 'gif' && msg.type !== 'file' && !msg.is_deleted_for_everyone && (msg.type !== 'image' || msg.caption) && (
+                            {isMe && !isAudio && msg.type !== 'gif' && msg.type !== 'file' && msg.type !== 'poll' && !msg.is_deleted_for_everyone && (msg.type !== 'image' || msg.caption) && (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={(e) => {
@@ -974,7 +1020,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                 </button>
                             )}
 
-                            {msg.type !== 'audio' && msg.type !== 'gif' && msg.type !== 'file' && !isAi && !msg.is_view_once && (
+                            {msg.type !== 'audio' && msg.type !== 'gif' && msg.type !== 'file' && msg.type !== 'poll' && !isAi && !msg.is_view_once && (
                                 <button 
                                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
                                     onClick={async (e) => {
@@ -1015,6 +1061,21 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                 >
                                     <span className="material-symbols-outlined text-base">content_copy</span>
                                     <span>{msg.type === 'image' ? 'Copy' : 'Copy Text'}</span>
+                                </button>
+                            )}
+
+                            {/* [NEW] Pin/Unpin Option */}
+                            {!isAi && onPin && !msg.is_deleted_for_everyone && (
+                                <button 
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors first:rounded-t-2xl last:rounded-b-2xl"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPin(msg);
+                                        setShowMenu(false);
+                                    }}
+                                >
+                                    <span className="material-symbols-outlined text-base">{msg.is_pinned ? 'keep_off' : 'push_pin'}</span>
+                                    <span>{msg.is_pinned ? 'Unpin' : 'Pin'}</span>
                                 </button>
                             )}
                             
@@ -1062,7 +1123,15 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                 </div>
                 </div>
                 
-                <div className={`text-[10px] mt-1 px-1 opacity-0 ${msg.status !== 'sending' ? 'group-hover:opacity-100' : ''} transition-opacity select-none ${isMe ? 'text-slate-400 dark:text-slate-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                
+                <div className={`text-[10px] mt-1 px-1 flex items-center justify-end gap-1 select-none transition-opacity ${
+                    (msg.status === 'sending' || msg.is_pinned) 
+                        ? 'opacity-100 text-slate-500 dark:text-slate-400' 
+                        : `opacity-0 group-hover:opacity-100 ${isMe ? 'text-slate-400 dark:text-slate-500' : 'text-slate-400 dark:text-slate-500'}`
+                }`}>
+                    {msg.is_pinned && (
+                        <span className="material-symbols-outlined text-[12px] -rotate-45" title="Pinned">keep</span>
+                    )}
                     {formatTime(msg.created_at)}
                 </div>
             </div>
@@ -1070,7 +1139,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate, searchTerm, onLoadMore, loadingMore, hasMore, isAiChat }) { // [MODIFIED] Added props
+export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate, onPin, searchTerm, onLoadMore, loadingMore, hasMore, isAiChat }) { // [MODIFIED] Added onPin
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
 
@@ -1231,21 +1300,29 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
         const div = scrollRef.current;
         if (!div) return;
         
-        if (shouldScrollToBottom.current) {
+        const lastMsg = messages[messages.length - 1];
+        // [FIX] Force scroll if the last message is from me (sent just now)
+        // AI messages count as "from me" contextually if I triggered them? No, AI is separate.
+        // But if I sent a prompt, I want to see it.
+        const isLastMsgMine = lastMsg && lastMsg.user_id === currentUser.id;
+
+        if (shouldScrollToBottom.current || isLastMsgMine) {
             if (messages.length > 0) {
                 // [FIX] Use setTimeout to ensure DOM is fully painted/layout is done before scrolling
+                const behavior = shouldScrollToBottom.current ? 'auto' : 'smooth';
                 setTimeout(() => {
-                    bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+                    bottomRef.current?.scrollIntoView({ behavior });
                 }, 100);
                 shouldScrollToBottom.current = false;
             }
         } else {
-            const isNearBottom = div.scrollHeight - div.scrollTop - div.clientHeight < 150;
+            // If receiving others' messages, only scroll if we were already at bottom
+            const isNearBottom = div.scrollHeight - div.scrollTop - div.clientHeight < 200; // Increased threshold
             if (isNearBottom) {
                 bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
             }
         }
-    }, [messages]);
+    }, [messages, currentUser.id]);
 
     const handleImageLoad = () => {
         // When an image loads, if we should be at bottom (e.g. initial load) OR if we were already near bottom, scroll down.
@@ -1362,7 +1439,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
         >
             <div 
                 ref={scrollRef}
-                className="absolute inset-0 overflow-y-auto p-6 space-y-6 custom-scrollbar z-0"
+                className="absolute inset-0 overflow-y-auto overflow-x-hidden p-6 space-y-6 custom-scrollbar z-0"
                 onScroll={handleScroll}
             >
                 {loadingMore && (
@@ -1377,7 +1454,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                         onClose={() => setViewingImage(null)} 
                     />
                 )}
-                {messages.map((msg, index) => {
+                {messages.filter(m => m.type !== 'poll_vote').map((msg, index) => {
                     // [FIX] AI messages might have same user_id but are NOT 'me' for display purposes
                     const isAi = msg.user_id === 'ai-assistant' || msg.author_name === 'Assistant' || (msg.meta && msg.meta.ai) || msg.isStreaming;
                     const isMe = msg.user_id == currentUser.id && !isAi;
@@ -1409,6 +1486,9 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                          } else if (msg.content.includes('updated group permissions')) {
                             icon = 'settings';
                             textColor = 'text-orange-500 dark:text-orange-400';
+                         } else if (msg.content.includes('pinned a message')) {
+                            icon = 'push_pin';
+                            textColor = 'text-amber-600 dark:text-amber-400';
                          }
  
                          return (
@@ -1424,6 +1504,10 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                                                  if (String(msg.targetUserId) === String(currentUser.id)) {
                                                       return `You were added by ${msg.actorName || 'someone'}`;
                                                  }
+                                             }
+                                             if (msg.content.includes('pinned a message')) {
+                                                 const name = msg.user_id === currentUser.id ? 'You' : (msg.display_name || 'Someone');
+                                                 return `${name} pinned a message`;
                                              }
                                              return linkifyText(msg.content);
                                          })()}
@@ -1449,10 +1533,11 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             onEdit={onEdit} 
                             onImageLoad={handleImageLoad}
                             onRegenerate={onRegenerate}
-                            searchTerm={searchTerm} // [MODIFIED] Pass search term
-                            scrollToMessage={scrollToMessage} // [NEW] Pass scrollToMessage
-                            onImageClick={handleImageClick} // [NEW] Pass handler
-                            token={token} // [NEW] Pass token for authorized fetches
+                            onPin={onPin}
+                            searchTerm={searchTerm}
+                            scrollToMessage={scrollToMessage}
+                            onImageClick={handleImageClick}
+                            token={token}
                         />
                     );
                 })}

@@ -371,14 +371,18 @@ router.post('/', async (req, res) => {
                 VALUES ($1, $2, 'gif', $3, $4, $5, $6, $7, $8)
                 RETURNING id, status, reply_to_message_id, created_at
             `;
-            // Content is optional for GIF, but let's store "GIF" or something if empty? Prompt says "leave content optional".
-            // If DB column not null default 'text', we might need something? 
-            // In migration, I added default 'text' for type, but content?
-            // Existing schema likely has content NOT NULL? I should check or provide default.
-            // Let's provide "GIF" as fallback content for notifications/previews if `content` is empty.
             params = [room_id, req.user.id, content || 'GIF', gif_url, preview_url, width, height, replyToMessageId || null];
+        } else if (type === 'location') {
+            // [NEW] Location message handling
+            const { latitude, longitude, address } = req.body;
+            query = `
+                INSERT INTO messages (room_id, user_id, type, content, latitude, longitude, address, reply_to_message_id)
+                VALUES ($1, $2, 'location', $3, $4, $5, $6, $7)
+                RETURNING id, status, reply_to_message_id, created_at
+            `;
+            params = [room_id, req.user.id, address || 'Location', latitude, longitude, address || null, replyToMessageId || null];
         } else {
-            // Fallback for text if we move text sending to REST later, though socket handles it now.
+            // Fallback for text
             query = `
                 INSERT INTO messages (room_id, user_id, content, reply_to_message_id) 
                 VALUES ($1, $2, $3, $4) 
@@ -480,13 +484,16 @@ router.post('/', async (req, res) => {
             room_id,
             user_id: req.user.id,
             type: type,
-            content: content || (type === 'gif' ? 'GIF' : ''),
+            content: content || (type === 'gif' ? 'GIF' : type === 'location' ? (req.body.address || 'Location') : ''),
             gif_url,
             preview_url,
             width,
             height,
+            // [NEW] Location fields
+            latitude: req.body.latitude || null,
+            longitude: req.body.longitude || null,
+            address: req.body.address || null,
             status: info.status,
-            reply_to_message_id: info.reply_to_message_id,
             reply_to_message_id: info.reply_to_message_id,
             created_at: createdAtISO,
 
@@ -752,6 +759,175 @@ router.get('/:id/view-once', async (req, res) => {
 
     } catch (err) {
         console.error('Error fetching view once:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// =====================
+// PINNED MESSAGES ROUTES
+// =====================
+
+// Pin a message
+router.post('/:id/pin', async (req, res) => {
+    const messageId = req.params.id;
+    const userId = req.user.id;
+    const { durationHours = 168 } = req.body; // Default 7 days
+
+    try {
+        // Get message and verify it exists
+        const msgRes = await db.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        if (msgRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        const message = msgRes.rows[0];
+
+        // Verify user is member of the room
+        const memberRes = await db.query(
+            'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', 
+            [message.room_id, userId]
+        );
+        if (memberRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // Check if already pinned
+        if (message.is_pinned) {
+            return res.status(400).json({ error: 'Message is already pinned' });
+        }
+
+        // Calculate expiration
+        const pinExpiresAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+
+        // Pin the message
+        await db.query(`
+            UPDATE messages 
+            SET is_pinned = TRUE, pinned_by = $1, pinned_at = NOW(), pin_expires_at = $3
+            WHERE id = $2
+        `, [userId, messageId, pinExpiresAt]);
+
+        // Get pinner info
+        const userRes = await db.query('SELECT display_name FROM users WHERE id = $1', [userId]);
+        const pinnerName = userRes.rows[0]?.display_name || 'Someone';
+
+        // Create system message for pin action
+        const systemMsgRes = await db.query(`
+            INSERT INTO messages (room_id, user_id, type, content)
+            VALUES ($1, $2, 'system', $3)
+            RETURNING id, created_at
+        `, [message.room_id, userId, `pinned a message`]);
+        
+        const systemMsg = {
+            id: systemMsgRes.rows[0].id,
+            room_id: message.room_id,
+            user_id: userId,
+            type: 'system',
+            content: 'pinned a message',
+            created_at: systemMsgRes.rows[0].created_at,
+            display_name: pinnerName
+        };
+
+        // Broadcast to room
+        const io = req.app.get('io');
+        io.to(`room:${message.room_id}`).emit('new_message', systemMsg);
+        io.to(`room:${message.room_id}`).emit('message_pinned', {
+            messageId: message.id,
+            roomId: message.room_id,
+            pinnedBy: userId,
+            pinnedByName: pinnerName,
+            pinnedAt: new Date().toISOString(),
+            pinExpiresAt: pinExpiresAt.toISOString()
+        });
+
+        res.json({ success: true, messageId, pinExpiresAt: pinExpiresAt.toISOString() });
+
+    } catch (err) {
+        console.error('Error pinning message:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Unpin a message
+router.delete('/:id/pin', async (req, res) => {
+    const messageId = req.params.id;
+    const userId = req.user.id;
+
+    try {
+        // Get message
+        const msgRes = await db.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        if (msgRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        const message = msgRes.rows[0];
+
+        // Verify user is member
+        const memberRes = await db.query(
+            'SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2', 
+            [message.room_id, userId]
+        );
+        if (memberRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // Check if pinned
+        if (!message.is_pinned) {
+            return res.status(400).json({ error: 'Message is not pinned' });
+        }
+
+        // Unpin the message
+        await db.query(`
+            UPDATE messages 
+            SET is_pinned = FALSE, pinned_by = NULL, pinned_at = NULL
+            WHERE id = $1
+        `, [messageId]);
+
+        // Broadcast to room
+        const io = req.app.get('io');
+        io.to(`room:${message.room_id}`).emit('message_unpinned', {
+            messageId: message.id,
+            roomId: message.room_id
+        });
+
+        res.json({ success: true, messageId });
+
+    } catch (err) {
+        console.error('Error unpinning message:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get all pinned messages for a room
+router.get('/room/:roomId/pinned', async (req, res) => {
+    const roomId = req.params.roomId;
+    const userId = req.user.id;
+
+    try {
+        // Verify user is member
+        const memberRes = await db.query(
+            'SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2', 
+            [roomId, userId]
+        );
+        if (memberRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // Get pinned messages with user info
+        const result = await db.query(`
+            SELECT m.*, 
+                   u.display_name, u.username, u.avatar_thumb_url, u.avatar_url,
+                   pinner.display_name as pinned_by_name
+            FROM messages m
+            JOIN users u ON m.user_id = u.id
+            LEFT JOIN users pinner ON m.pinned_by = pinner.id
+            WHERE m.room_id = $1 
+              AND m.is_pinned = TRUE 
+              AND m.is_deleted_for_everyone = FALSE
+            ORDER BY m.pinned_at DESC
+        `, [roomId]);
+
+        res.json(result.rows);
+
+    } catch (err) {
+        console.error('Error fetching pinned messages:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });

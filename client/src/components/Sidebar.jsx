@@ -9,9 +9,11 @@ import { linkifyText } from '../utils/linkify';
 import SparkleLogo from './icons/SparkleLogo';
 import { renderTextWithEmojis } from '../utils/emojiRenderer';
 import SidebarContextMenu from './SidebarContextMenu';
+import { ChatListSkeleton } from './SkeletonLoaders';
+import PollIcon from './icons/PollIcon';
 
 
-export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, onCreateRoom, onJoinRoom, user, onLogout, onRefresh }) {
+export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, isLoading, onCreateRoom, onJoinRoom, user, onLogout, onRefresh }) {
     const { presenceMap, fetchStatuses } = usePresence();
     const { hasPasscode, lockApp } = useAppLock();
     const { theme, toggleTheme } = useTheme();
@@ -26,6 +28,37 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
     // [NEW] Archived State
     const [viewArchived, setViewArchived] = useState(false);
     const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, room: null });
+    
+    // [NEW] Draft messages state - check localStorage
+    const [drafts, setDrafts] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+        } catch {
+            return {};
+        }
+    });
+    
+    // Update drafts when localStorage changes (on focus or custom event)
+    useEffect(() => {
+        const updateDrafts = () => {
+            try {
+                const storedDrafts = JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+                setDrafts(storedDrafts);
+            } catch {
+                setDrafts({});
+            }
+        };
+        
+        // Listen for focus (when switching tabs)
+        window.addEventListener('focus', updateDrafts);
+        // Listen for custom event (when draft changes in same tab)
+        window.addEventListener('draftsUpdated', updateDrafts);
+        
+        return () => {
+            window.removeEventListener('focus', updateDrafts);
+            window.removeEventListener('draftsUpdated', updateDrafts);
+        };
+    }, []);
 
     const filteredRooms = rooms.filter(r => {
         if (viewArchived) {
@@ -85,10 +118,6 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
         if (!content) return 'No messages yet';
         
         // Split by mention pattern: @[Name](user:ID)
-        // Capture groups: 1=Name, 2=ID. The split will include full match and capture groups if we regex text.
-        // Better: user regex match all or split. 
-        // Let's use split with capturing groups to interleave text and matches.
-        
         const parts = content.split(/(@\[.*?\]\(user:\d+\))/g);
         
         return parts.map((part, i) => {
@@ -108,8 +137,17 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                     </span>
                 );
             }
-            // Regular text: render with emojis
-            return renderTextWithEmojis(part);
+            // Regular text: render with emojis AND strip markdown
+            const stripped = part
+                .replace(/\*\*(.*?)\*\*/g, '$1') // Bold **
+                .replace(/\*(.*?)\*/g, '$1')     // Italic *
+                .replace(/__(.*?)__/g, '$1')     // Bold __
+                .replace(/_(.*?)_/g, '$1')       // Italic _
+                .replace(/`([^`]+)`/g, '$1')     // Code `
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Link [text](url)
+                .replace(/^#+\s+/g, '');         // Heading #
+
+            return renderTextWithEmojis(stripped, '1.65em');
         });
     };
 
@@ -125,7 +163,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
     };
 
     return (
-        <div className="w-full h-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl transition-colors">
+        <div className="w-full h-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl transition-colors">
             {/* ... (Header) ... */}
             <div className="p-6 border-b border-slate-200/50 dark:border-slate-800/50 flex justify-between items-center bg-white/30 dark:bg-slate-900/30">
                 <div className="flex items-center gap-3 flex-1 min-w-0 mr-2">
@@ -328,7 +366,10 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
 
             {/* Room List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-                {filteredRooms.length === 0 && (
+                {/* Show skeleton while loading */}
+                {isLoading ? (
+                    <ChatListSkeleton count={6} />
+                ) : filteredRooms.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 text-sm">
                         {tab === 'ai' ? (
                             <div className="flex flex-col items-center gap-2">
@@ -340,8 +381,8 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                             `No ${tab} chats yet.`
                         )}
                     </div>
-                )}
-                {filteredRooms.map(room => (
+                ) : (
+                    filteredRooms.map(room => (
                     <div
                         key={room.id}
                         onClick={() => onSelectRoom(room)}
@@ -385,8 +426,15 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                 <span className="truncate font-medium block">
                                     {room.type === 'ai' ? 'Sparkle AI' : linkifyText(room.name)}
                                 </span>
-                                {room.type === 'group' && !room.last_message_content && !room.last_message_type ? (
+                                {room.type === 'group' && !room.last_message_content && !room.last_message_type && !drafts[room.id] ? (
                                     <span className="text-[10px] text-slate-500 font-mono">#{room.code}</span>
+                                ) : drafts[room.id] ? (
+                                    <div className="text-xs truncate flex items-center gap-1">
+                                        <span className="text-orange-500 dark:text-orange-400 font-medium">Draft:</span>
+                                        <span className="text-slate-500 dark:text-slate-400 truncate">
+                                            {drafts[room.id].replace(/<[^>]*>/g, '').slice(0, 30)}
+                                        </span>
+                                    </div>
                                 ) : (
                                     <div className="text-xs text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
                                         {room.last_message_sender_id === user.id && room.type !== 'ai' && (
@@ -422,7 +470,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                                     ) : (
                                                         <>
                                                             <span className="material-symbols-outlined text-[18px] translate-y-[0.5px]">image</span>
-                                                            <span className="truncate">{room.last_message_caption ? renderTextWithEmojis(room.last_message_caption) : 'Photo'}</span>
+                                                            <span className="truncate">{room.last_message_caption ? renderTextWithEmojis(room.last_message_caption, '1.65em') : 'Photo'}</span>
                                                         </>
                                                     )}
                                                 </span>
@@ -432,12 +480,41 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                                     <span className="material-symbols-outlined text-[18px] translate-y-[0.5px]">description</span>
                                                         <span className="truncate">
                                                             {room.last_message_file_name || 'File'}
-                                                            {room.last_message_caption ? ` • ${renderTextWithEmojis(room.last_message_caption)}` : ''}
+                                                            {room.last_message_caption ? ` • ${renderTextWithEmojis(room.last_message_caption, '1.65em')}` : ''}
                                                         </span>
                                                 </span>
                                              ) :
                                              room.last_message_type === 'audio' ? 'Sent an audio' :
                                              room.last_message_type === 'gif' ? 'Sent a GIF' :
+                                             room.last_message_type === 'poll_vote' ? (
+                                                 <span className="flex items-center gap-1">
+                                                     <span className="shrink-0">
+                                                         {room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name, '1.65em')}
+                                                     </span>
+                                                     <span>voted in:</span>
+                                                     <PollIcon className="w-4 h-4 shrink-0" />
+                                                     <span className="truncate">{room.last_message_poll_question || 'Poll'}</span>
+                                                 </span>
+                                             ) :
+                                             room.last_message_type === 'poll' ? (
+                                                 <span className="flex items-center gap-1">
+                                                     {room.type === 'group' && room.last_message_sender_name && (
+                                                        <span className="shrink-0">{room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name, '1.65em')}:</span>
+                                                    )}
+                                                     <PollIcon className="w-4 h-4 shrink-0" />
+                                                     <span className="truncate">{room.last_message_poll_question || 'Poll'}</span>
+                                                 </span>
+                                             ) :
+                                             (room.last_message_content && room.last_message_content.includes('pinned a message')) ? (
+                                                 <span className="flex items-center gap-1">
+                                                     <span className="material-symbols-outlined text-[16px] translate-y-[0.5px]">push_pin</span>
+                                                     <span>
+                                                         {room.last_message_sender_id === user.id 
+                                                             ? 'You pinned a message' 
+                                                             : `${room.last_message_sender_name || 'Someone'} pinned a message`}
+                                                     </span>
+                                                 </span>
+                                             ) :
                                              renderPreview(room.last_message_content)}
                                         </span>
                                     </div>
@@ -495,7 +572,8 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                 )}
                             </div>
                     </div>
-                ))}
+                ))
+                )}
 
             </div>
 

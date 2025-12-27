@@ -50,6 +50,9 @@ app.use('/api/messages', messageRoutes);
 const tenorRoutes = require('./tenor');
 app.use('/api/gifs', tenorRoutes);
 
+const pollsRoutes = require('./polls');
+app.use('/api/polls', pollsRoutes);
+
 // AI Integration
 const { setupAI } = require('./ai');
 setupAI(app, io, db, redisClient);

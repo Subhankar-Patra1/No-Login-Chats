@@ -165,7 +165,7 @@ async function handleQuery(req, res) {
                 userId, 
                 prompt, 
                 JSON.stringify({ is_prompt: true, operationId }),
-                createdAt
+                createdAt.toISOString()
             ]);
 
             userMsgId = msgRes.rows[0].id;
@@ -378,7 +378,7 @@ async function generateResponse(userId, roomId, prompt, operationId, aiName, cur
                         fullText, 
                         'Assistant', 
                         meta,
-                        createdAt
+                        createdAt.toISOString()
                      ]);
                      
                      if (saveRes.rows.length > 0) {

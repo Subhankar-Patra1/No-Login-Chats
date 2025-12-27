@@ -16,13 +16,16 @@ const formatDuration = (ms) => {
 };
 
 import AISendIcon from './icons/AISendIcon';
+import PollIcon from './icons/PollIcon';
 
 export default function MessageInput({ 
     onSend, 
     onSendAudio, 
-    onImageSelected, // [NEW] Scoped Handler
-    onFileSelected, // [NEW] File Handler
-    onSendImage, // Keep for backward compatibility or remove if unused 
+    onImageSelected,
+    onFileSelected,
+    onSendImage,
+    onLocationClick,
+    onPollClick,
     disabled, 
     replyTo, 
     setReplyTo,
@@ -33,10 +36,11 @@ export default function MessageInput({
     onTypingStart,
     onTypingStop,
     isAi = false,
-    isGenerating = false, // [FIX] Add missing prop
-    onStop = () => {},     // [FIX] Add missing prop
-    members = [],           // [NEW] Mention members
-    currentUser            // [NEW] To filter self
+    isGenerating = false,
+    onStop = () => {},
+    members = [],
+    currentUser,
+    roomId
 }) {
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
@@ -76,6 +80,10 @@ export default function MessageInput({
     // Typing throttle refs
     const lastTypingTime = useRef(0);
     const typingTimeoutRef = useRef(null);
+    
+    // [NEW] Draft message refs
+    const draftSaveTimeoutRef = useRef(null);
+    const previousRoomIdRef = useRef(roomId);
 
     // [FIX] Ref to hold latest handleSubmit to avoid stale closures in handleKeyDown
     const handleSubmitRef = useRef(null);
@@ -96,6 +104,62 @@ export default function MessageInput({
             }
         }
     }, [editingMessage]);
+    
+    // [NEW] Draft Messages: Load draft when room changes
+    useEffect(() => {
+        if (!roomId || editingMessage) return;
+        
+        // Save draft for previous room before switching
+        if (previousRoomIdRef.current && previousRoomIdRef.current !== roomId && html.trim()) {
+            const drafts = JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+            drafts[previousRoomIdRef.current] = html;
+            localStorage.setItem('cipher_drafts', JSON.stringify(drafts));
+        }
+        
+        // Load draft for new room
+        const drafts = JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+        const savedDraft = drafts[roomId] || '';
+        setHtml(savedDraft);
+        if (editorRef.current) {
+            editorRef.current.innerHTML = savedDraft;
+        }
+        
+        previousRoomIdRef.current = roomId;
+    }, [roomId]);
+    
+    // [NEW] Draft Messages: Debounced save on content change
+    useEffect(() => {
+        if (!roomId || editingMessage) return;
+        
+        // Clear previous timeout
+        if (draftSaveTimeoutRef.current) {
+            clearTimeout(draftSaveTimeoutRef.current);
+        }
+        
+        // Debounce save by 500ms
+        draftSaveTimeoutRef.current = setTimeout(() => {
+            const drafts = JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+            
+            // Strip HTML tags to check if there's actual content
+            const textContent = html.replace(/<[^>]*>/g, '').trim();
+            
+            if (textContent) {
+                drafts[roomId] = html;
+            } else {
+                delete drafts[roomId];
+            }
+            localStorage.setItem('cipher_drafts', JSON.stringify(drafts));
+            
+            // Dispatch storage event for same-tab listeners
+            window.dispatchEvent(new Event('draftsUpdated'));
+        }, 300);
+        
+        return () => {
+            if (draftSaveTimeoutRef.current) {
+                clearTimeout(draftSaveTimeoutRef.current);
+            }
+        };
+    }, [html, roomId, editingMessage]);
 
     // [FIX] Auto-focus when replying
     useEffect(() => {
@@ -298,6 +362,13 @@ export default function MessageInput({
                 }
             } else {
                 onSend(plainText);
+            }
+            
+            // [NEW] Clear draft for this room
+            if (roomId) {
+                const drafts = JSON.parse(localStorage.getItem('cipher_drafts') || '{}');
+                delete drafts[roomId];
+                localStorage.setItem('cipher_drafts', JSON.stringify(drafts));
             }
             
             // Cleanup
@@ -661,6 +732,14 @@ export default function MessageInput({
                                             {replyTo.caption || replyTo.file_name || "File"}
                                         </span>
                                     </div>
+                                ) : replyTo.type === 'poll' ? (
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-semibold text-violet-600 dark:text-violet-300 flex items-center gap-1">{renderTextWithEmojis(replyTo.sender)}</span>
+                                        <span className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                            <PollIcon className="w-4 h-4 shrink-0" />
+                                            {replyTo.poll_question || 'Poll'}
+                                        </span>
+                                    </div>
                                 ) : (
                                     <div className="flex flex-col">
                                         <span className="text-sm font-semibold text-violet-600 dark:text-violet-300 flex items-center gap-1">{renderTextWithEmojis(replyTo.sender)}</span>
@@ -833,6 +912,32 @@ export default function MessageInput({
                                             multiple 
                                             onChange={handleFileChange} 
                                         />
+
+                                        {/* Location Button */}
+                                        {onLocationClick && (
+                                            <button
+                                                type="button"
+                                                onClick={onLocationClick}
+                                                className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
+                                                title="Share Location"
+                                                disabled={disabled}
+                                            >
+                                                <span className="material-symbols-outlined text-[20px]">location_on</span>
+                                            </button>
+                                        )}
+
+                                        {/* Poll Button */}
+                                        {onPollClick && (
+                                            <button
+                                                type="button"
+                                                onClick={onPollClick}
+                                                className="p-2 text-slate-400 hover:text-violet-500 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
+                                                title="Create Poll"
+                                                disabled={disabled}
+                                            >
+                                                <span className="material-symbols-outlined text-[20px]">ballot</span>
+                                            </button>
+                                        )}
                                     </>
                                 )}
                             </div>
