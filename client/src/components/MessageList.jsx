@@ -17,6 +17,7 @@ import LocationMessage from './LocationMessage';
 import PollMessage from './PollMessage';
 import PollIcon from './icons/PollIcon';
 import { NoMessages } from './EmptyState';
+import { renderMusicPreviews, hasMusicLinks } from '../utils/musicLinkDetector';
 
 const formatDuration = (ms) => {
     if (!ms) return '0:00';
@@ -842,6 +843,8 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                         {msg.edited_at && (
                                             <span className="text-[10px] opacity-60 ml-1">(edited)</span>
                                         )}
+                                        {/* Music Link Previews */}
+                                        {hasMusicLinks(msg.content) && renderMusicPreviews(msg.content)}
                                      </>
                                 )}
                     
