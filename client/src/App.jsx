@@ -6,6 +6,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import InvitePage from './pages/InvitePage';
 import { AppLockProvider } from './context/AppLockContext';
+import { ChatLockProvider } from './context/ChatLockContext';
 import LockScreen from './components/LockScreen';
 
 import LandingPage from './pages/LandingPage';
@@ -27,6 +28,7 @@ function App() {
     <AuthProvider>
         <NotificationProvider>
             <AppLockProvider>
+                <ChatLockProvider>
                 <LockScreen />
                 <Router>
                     <Routes>
@@ -48,6 +50,7 @@ function App() {
                         } />
                     </Routes>
                 </Router>
+                </ChatLockProvider>
             </AppLockProvider>
         </NotificationProvider>
     </AuthProvider>

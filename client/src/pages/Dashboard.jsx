@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { ChatLockProvider } from '../context/ChatLockContext';
+// [MODIFIED] Use context, don't provide it here
+import { useChatLock } from '../context/ChatLockContext';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import AIChatWindow from '../components/AIChatWindow';
@@ -71,6 +72,9 @@ export default function Dashboard() {
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const activeRoomRef = useRef(null);
     const canNotifyRef = useRef(canNotify); // Track current notification state for socket handler
+
+    // [NEW] Get pending unlock status for mobile layout
+    const { pendingUnlockRoom } = useChatLock();
     
     // Resize Logic
     const [sidebarWidth, setSidebarWidth] = useState(288); // Default w-72 (288px)
@@ -761,17 +765,16 @@ export default function Dashboard() {
     };
 
     return (
-        <ChatLockProvider>
         <PresenceProvider socket={socket}>
             <AiChatProvider socket={socket}>
         {/* Notification Permission Banner */}
         <NotificationPermissionBanner />
         
         <div className={`fixed inset-0 h-[100dvh] w-full bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden flex ${isResizing ? 'select-none cursor-col-resize' : ''} animate-dashboard-entry transition-colors`}>
-            {/* Mobile: Sidebar hidden if activeRoom exists. Desktop: Always visible */}
+            {/* Mobile: Sidebar hidden if activeRoom exists OR pending unlock. Desktop: Always visible */}
             <div 
                 className={`
-                    ${activeRoom ? 'hidden md:flex' : 'flex'} 
+                    ${(activeRoom || pendingUnlockRoom) ? 'hidden md:flex' : 'flex'} 
                     h-full z-10 shrink-0
                     w-full md:w-[var(--sidebar-width)]
                 `}
@@ -808,7 +811,7 @@ export default function Dashboard() {
             {/* Mobile: Chat visible if activeRoom exists. Desktop: Always visible (flex-1) */}
             <ChatAreaLockGuard onUnlockComplete={handleSelectRoom}>
             <div className={`
-                ${activeRoom ? 'flex' : 'hidden md:flex'} 
+                ${(activeRoom || pendingUnlockRoom) ? 'flex' : 'hidden md:flex'} 
                 flex-1 flex-col h-full bg-gray-50 dark:bg-slate-950 relative z-0 min-w-0 overflow-hidden transition-colors duration-300
             `}>
                 {activeRoom ? (
@@ -953,6 +956,5 @@ export default function Dashboard() {
         </div>
         </AiChatProvider>
         </PresenceProvider>
-        </ChatLockProvider>
     );
 }
