@@ -382,7 +382,19 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                 <span className="text-xs text-slate-400">Initializing...</span>
                             </div>
                         ) : (
-                            `No ${tab} chats yet.`
+                            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                                <img 
+                                    src="/brief.gif" 
+                                    alt="No chats" 
+                                    className="w-28 h-28 object-contain opacity-90 grayscale-[0.2] mix-blend-multiply dark:mix-blend-screen dark:invert dark:hue-rotate-180 dark:opacity-80" 
+                                />
+                                <p className="text-slate-700 dark:text-slate-200 font-medium text-base mt-2">
+                                    No {tab} chats yet
+                                </p>
+                                <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 max-w-[200px] mx-auto leading-relaxed">
+                                    {tab === 'group' ? "Create a group to get involved!" : "Start a conversation to connect."}
+                                </p>
+                            </div>
                         )}
                     </div>
                 ) : (
