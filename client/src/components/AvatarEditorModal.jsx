@@ -146,7 +146,7 @@ async function getCroppedImg(
     return new Promise((resolve, reject) => {
         canvas.toBlob((file) => {
             resolve(file);
-        }, 'image/webp', 0.85); // WebP 85%
+        }, 'image/webp', 1.0); // WebP 100%
     });
 }
 
@@ -199,7 +199,7 @@ export default function AvatarEditorModal({ isOpen, onClose, ...props }) {
 
         try {
             // Generate two blobs
-            const avatarBlob = await getCroppedImg(imageSrc, croppedAreaPixels, rotation, 256);
+            const avatarBlob = await getCroppedImg(imageSrc, croppedAreaPixels, rotation, 2048);
             const thumbBlob = await getCroppedImg(imageSrc, croppedAreaPixels, rotation, 64);
 
             const presignUrl = props.uploadUrl || `${import.meta.env.VITE_API_URL}/api/users/me/avatar/presign`;

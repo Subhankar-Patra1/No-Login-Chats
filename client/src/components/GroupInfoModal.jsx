@@ -10,6 +10,7 @@ import AvatarEditorModal from './AvatarEditorModal';
 import GroupPermissionsView from './GroupPermissionsView';
 import GroupParticipantsView from './GroupParticipantsView';
 import SharedMedia from './SharedMedia'; // [NEW]
+import ImageViewerModal from './ImageViewerModal';
 
 export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket, onGoToMessage }) {
     const { token, user: currentUser } = useAuth();
@@ -479,19 +480,10 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
         <div className="fixed inset-0 bg-gray-900/80 dark:bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-colors duration-300">
              {/* Full Screen Image Modal */}
             {fullScreenImage && (
-                <div 
-                    className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center cursor-zoom-out p-4 overflow-hidden"
-                    onClick={() => setFullScreenImage(null)}
-                >
-                    <img 
-                        src={fullScreenImage} 
-                        alt="Full View" 
-                        className="max-w-full max-h-full object-contain shadow-2xl rounded-lg animate-scale-up"
-                    />
-                    <button className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined text-4xl">close</span>
-                    </button>
-                </div>
+                <ImageViewerModal
+                    images={[{ src: fullScreenImage, alt: room.name || "Group Photo" }]}
+                    onClose={() => setFullScreenImage(null)}
+                />
             )}
 
             {/* Avatar Editor Modal */}

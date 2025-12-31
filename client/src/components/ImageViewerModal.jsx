@@ -239,7 +239,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                          </div>
                      )}
 
-                     {!currentImage.senderName && (
+                     {!currentImage.senderName && imageList.length > 1 && (
                          <span className="text-white/80 text-sm font-medium">
                             {currentIndex + 1} / {imageList.length}
                          </span>
@@ -298,7 +298,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
 
             {/* Image Area */}
             <div 
-                className="flex-1 flex items-center justify-center overflow-hidden w-full h-full relative"
+                className="flex-1 flex items-center justify-center overflow-hidden w-full h-full relative py-12 px-4"
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}

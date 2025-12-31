@@ -20,7 +20,8 @@
 - **📝 Rich Text & Code**: Markdown support with syntax highlighting for code blocks and copy-to-clipboard functionality.
 - **� Advanced Emoji Support**: Full emoji picker with smart emoji rendering using Twemoji for consistent cross-platform display.
 - **🎤 Voice Notes**: Record and send audio messages with waveform previews.
-- **🖼️ Advanced Media Viewer**: Full touch support with pinch-to-zoom, pan, and swipe navigation for images.
+- **🖼️ High-Fidelity Profiles**: Upload high-resolution avatars (up to 2048px) with full-screen zoom interactions.
+- **🖼️ Advanced Media Viewer**: Full touch support with pinch-to-zoom (up to 5x), pan, and swipe navigation for images. Now with optimized quality for profile photos.
 - **🖼️ Smart Image Grouping**: Upload multiple images with individual captions, or group them into a beautiful grid with a shared caption.
 - **📂 Advanced File Sharing**: Share any file type with instant previews and dedicated download controls.
 - **🎥 GIF Support**: Send animated GIFs powered by Tenor.

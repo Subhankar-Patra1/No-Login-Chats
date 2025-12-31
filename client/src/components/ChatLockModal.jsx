@@ -110,10 +110,10 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     value={digit}
                     onChange={(e) => handleInput(refs, i, e.target.value, code, setCode, onComplete)}
                     onKeyDown={(e) => handleKeyDown(refs, i, e, code)}
-                    className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-800 border-2 text-center text-xl font-bold text-white focus:outline-none transition-all ${
+                    className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 text-center text-xl font-bold text-slate-900 dark:text-white focus:outline-none transition-all ${
                         error 
                         ? 'border-red-500' 
-                        : 'border-slate-700 focus:border-amber-500'
+                        : 'border-slate-200 dark:border-slate-700 focus:border-amber-500'
                     }`}
                 />
             ))}
@@ -126,11 +126,11 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
 
     return createPortal(
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-800 overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
                 
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-800">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 transition-colors">
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                         <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                         </svg>
@@ -138,7 +138,7 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     </h2>
                     <button 
                         onClick={onClose}
-                        className="p-1.5 rounded-full hover:bg-slate-800 transition-colors"
+                        className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                         <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -150,8 +150,8 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     {/* Menu for locked chats */}
                     {step === 'menu' && (
                         <div className="flex flex-col gap-4">
-                            <p className="text-slate-400 text-sm text-center mb-2">
-                                <span className="font-medium text-amber-400">{renderTextWithEmojis(chatName)}</span> is currently locked
+                            <p className="text-slate-500 dark:text-slate-400 text-sm text-center mb-2">
+                                <span className="font-medium text-amber-500 dark:text-amber-400">{renderTextWithEmojis(chatName)}</span> is currently locked
                             </p>
                             
                             <button
@@ -160,16 +160,16 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                                     setPasscode(['', '', '', '']);
                                     setConfirmPasscode(['', '', '', '']);
                                 }}
-                                className="flex items-center gap-3 p-4 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors text-left"
+                                className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left"
                             >
-                                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                                    <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
+                                    <svg className="w-5 h-5 text-amber-600 dark:text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="font-medium text-white">Change PIN</p>
-                                    <p className="text-slate-400 text-sm">Set a new passcode</p>
+                                    <p className="font-medium text-slate-800 dark:text-white">Change PIN</p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm">Set a new passcode</p>
                                 </div>
                             </button>
 
@@ -178,16 +178,16 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                                     setStep('verify');
                                     setPasscode(['', '', '', '']);
                                 }}
-                                className="flex items-center gap-3 p-4 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors text-left"
+                                className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left"
                             >
-                                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                                    <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                                    <svg className="w-5 h-5 text-red-600 dark:text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="font-medium text-white">Remove Lock</p>
-                                    <p className="text-slate-400 text-sm">Unlock this chat permanently</p>
+                                    <p className="font-medium text-slate-800 dark:text-white">Remove Lock</p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm">Unlock this chat permanently</p>
                                 </div>
                             </button>
                         </div>
@@ -197,8 +197,8 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     {step === 'set' && (
                         <div className="flex flex-col items-center gap-6">
                             <div className="text-center">
-                                <p className="text-white font-medium mb-1">Set a 4-digit PIN</p>
-                                <p className="text-slate-400 text-sm">This will lock "{renderTextWithEmojis(chatName)}"</p>
+                                <p className="text-slate-800 dark:text-white font-medium mb-1">Set a 4-digit PIN</p>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">This will lock "{renderTextWithEmojis(chatName)}"</p>
                             </div>
 
                             {renderPinInputs(inputRefs, passcode, setPasscode, handleSetComplete)}
@@ -213,8 +213,8 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     {step === 'confirm' && (
                         <div className="flex flex-col items-center gap-6">
                             <div className="text-center">
-                                <p className="text-white font-medium mb-1">Confirm your PIN</p>
-                                <p className="text-slate-400 text-sm">Enter the same PIN again</p>
+                                <p className="text-slate-800 dark:text-white font-medium mb-1">Confirm your PIN</p>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">Enter the same PIN again</p>
                             </div>
 
                             {renderPinInputs(confirmInputRefs, confirmPasscode, setConfirmPasscode, handleConfirmComplete)}
@@ -251,8 +251,8 @@ export default function ChatLockModal({ room, onClose, onLockSet }) {
                     {step === 'verify' && (
                         <div className="flex flex-col items-center gap-6">
                             <div className="text-center">
-                                <p className="text-white font-medium mb-1">Enter current PIN</p>
-                                <p className="text-slate-400 text-sm">To remove the lock from this chat</p>
+                                <p className="text-slate-800 dark:text-white font-medium mb-1">Enter current PIN</p>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">To remove the lock from this chat</p>
                             </div>
 
                             {renderPinInputs(inputRefs, passcode, setPasscode, handleVerifyComplete)}
