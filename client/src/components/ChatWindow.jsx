@@ -135,7 +135,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                      audio_duration_ms: original.audio_duration_ms,
                      file_name: original.file_name,
                      caption: original.caption,
-                     poll_question: original.poll?.question
+                     poll_question: original.poll?.question,
+                     attachments: original.attachments // [NEW] Pass attachments
                  }
              };
         });
@@ -318,7 +319,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                                 is_view_once: original.is_view_once,
                                 file_name: original.file_name,
                                 caption: original.caption,
-                                poll_question: original.poll?.question
+                                poll_question: original.poll?.question,
+                                attachments: original.attachments // [NEW] Pass attachments
                             };
                         }
                     }

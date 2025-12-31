@@ -66,38 +66,23 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
         }
     };
 
-    const handleDownload = async () => {
+    const handleDownload = () => {
          try {
              const url = currentImage.src || currentImage.url;
-             // Use Proxy to bypass CORS and force download
-             const proxyUrl = `${import.meta.env.VITE_API_URL}/api/messages/proxy-download?url=${encodeURIComponent(url)}`;
+             // [OPTIMIZED] Direct download using browser navigation
+             // Pass token in query since we enabled it on server
+             const proxyUrl = `${import.meta.env.VITE_API_URL}/api/messages/proxy-download?url=${encodeURIComponent(url)}&token=${token}`;
              
-             const response = await fetch(proxyUrl, {
-                 headers: { Authorization: `Bearer ${token}` }
-             });
-             
-             if (!response.ok) throw new Error('Proxy fetch failed');
-
-             const blob = await response.blob();
-             const blobUrl = window.URL.createObjectURL(blob);
-             
+             // Trigger download by creating a temporary link or window.location
              const a = document.createElement('a');
-             a.href = blobUrl;
-             // Filename from header or fallback
-             const contentDisp = response.headers.get('Content-Disposition');
-             let filename = `image-${currentIndex + 1}.png`;
-             if (contentDisp && contentDisp.includes('filename=')) {
-                 filename = contentDisp.split('filename=')[1].replace(/"/g, '');
-             }
-             
-             a.download = filename;
+             a.href = proxyUrl;
+             a.download = `image-${currentIndex + 1}.png`; // Attribute might be ignored by browser for cross-origin but server header handles it
              document.body.appendChild(a);
              a.click();
              document.body.removeChild(a);
-             window.URL.revokeObjectURL(blobUrl);
+
          } catch (error) {
-             console.error('Download failed:', error);
-             // Fallback
+             console.error('Download trigger failed:', error);
              window.open(currentImage.src || currentImage.url, '_blank');
          }
     };
@@ -225,7 +210,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                  <div className="flex items-center gap-4 pointer-events-auto">
                      <button
                         onClick={(e) => { e.stopPropagation(); onClose(); }}
-                        className="p-3 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors" // Larger touch target
+                        className="w-10 h-10 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
                      >
                          <span className="material-symbols-outlined text-[24px]">arrow_back</span>
                      </button>
@@ -283,7 +268,7 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                             e.stopPropagation(); 
                             handleDownload();
                         }}
-                        className="p-3 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors" // Larger target
+                        className="w-10 h-10 flex items-center justify-center rounded-full text-white/80 hover:text-white hover:bg-white/10 transition-colors"
                         title="Download"
                      >
                          <span className="material-symbols-outlined text-[24px]">download</span>
@@ -336,13 +321,51 @@ export default function ImageViewerModal({ images = [], startIndex = 0, onClose,
                 />
             </div>
 
+            {/* Thumbnails Strip - Hide when zoomed */}
+            {imageList.length > 1 && scale === 1 && (
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center z-[60] pointer-events-none animate-in slide-in-from-bottom-4 duration-300">
+                    <div 
+                        className="flex gap-2 p-2 bg-black/40 backdrop-blur-md rounded-2xl overflow-x-auto max-w-[90vw] pointer-events-auto scrollbar-hide no-scrollbar"
+                        ref={(el) => {
+                            // Auto-scroll logic
+                            if (el && imageList.length > 0) {
+                                const activeThumb = el.children[currentIndex];
+                                if (activeThumb) {
+                                    activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                                }
+                            }
+                        }}
+                    >
+                        {imageList.map((img, idx) => (
+                           <button
+                                key={idx}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentIndex(idx);
+                                }}
+                                className={`
+                                    relative flex-shrink-0 w-12 h-12 md:w-16 md:h-16 rounded-lg overflow-hidden border-2 transition-all duration-200
+                                    ${currentIndex === idx ? 'border-white scale-105' : 'border-transparent opacity-60 hover:opacity-100'}
+                                `}
+                           >
+                               <img 
+                                   src={img.src || img.url || img} 
+                                   alt="" 
+                                   className="w-full h-full object-cover" 
+                               />
+                           </button> 
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Caption Footer */}
             {imgAlt && (
                 <div 
-                    className="absolute bottom-0 left-0 right-0 p-6 bg-black/60 text-white text-center backdrop-blur-sm z-50 transition-opacity pointer-events-auto"
+                    className={`absolute left-0 right-0 p-6 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white text-center z-50 transition-opacity pointer-events-auto ${imageList.length > 1 && scale === 1 ? 'bottom-24 md:bottom-28' : 'bottom-0'}`}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <p className="text-base font-medium whitespace-pre-wrap max-h-[30vh] overflow-y-auto">
+                    <p className="text-base font-medium whitespace-pre-wrap max-h-[20vh] overflow-y-auto text-shadow-sm">
                         {linkifyText(imgAlt)}
                     </p>
                 </div>

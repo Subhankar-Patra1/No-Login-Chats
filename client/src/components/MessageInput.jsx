@@ -759,6 +759,16 @@ export default function MessageInput({
                                             </div>
                                         )}
                                     </div>
+                                ) : replyTo.type === 'image' ? (
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-semibold text-violet-600 dark:text-violet-300 flex items-center gap-1">{renderTextWithEmojis(replyTo.sender)}</span>
+                                        <span className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-sm">image</span>
+                                            {replyTo.attachments && replyTo.attachments.length > 1 
+                                                ? `${replyTo.attachments.length} photos` 
+                                                : (replyTo.caption || "Photo")}
+                                        </span>
+                                    </div>
                                 ) : (
                                     <div className="flex flex-col">
                                         <span className="text-sm font-semibold text-violet-600 dark:text-violet-300">{renderTextWithEmojis(replyTo.sender)}</span>

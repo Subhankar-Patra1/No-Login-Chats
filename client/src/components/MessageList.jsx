@@ -299,7 +299,11 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                 ) : msg.replyTo.type === 'image' ? (
                                     <div className="flex items-center gap-1 text-xs opacity-90">
                                         <span className="material-symbols-outlined text-[14px]">image</span>
-                                        <span className="truncate">{msg.replyTo.caption || "Photo"}</span>
+                                        <span className="truncate">
+                                            {msg.replyTo.attachments && msg.replyTo.attachments.length > 1 
+                                                ? `${msg.replyTo.attachments.length} photos` 
+                                                : (msg.replyTo.caption || "Photo")}
+                                        </span>
                                     </div>
                                 ) : msg.replyTo.type === 'file' ? (
                                     <div className="flex items-center gap-1 text-xs opacity-90">
@@ -997,7 +1001,8 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                             poll_question: msg.poll?.question,
                                             latitude: msg.latitude,
                                             longitude: msg.longitude,
-                                            address: msg.address
+                                            address: msg.address,
+                                            attachments: msg.attachments // [NEW] Pass attachments
                                         });
                                         setShowMenu(false);
                                     }}
