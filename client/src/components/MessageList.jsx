@@ -103,6 +103,10 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
         }
     });
 
+    const linkClass = isMe 
+        ? "text-white hover:text-slate-200 underline break-words decoration-violet-400 decoration-1 hover:decoration-2"
+        : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline break-words decoration-blue-300 dark:decoration-blue-500 decoration-1 hover:decoration-2";
+
     const markAsDownloaded = () => {
         setIsDownloaded(true);
         try {
@@ -401,7 +405,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                             </div>
                             {msg.content && msg.content !== 'GIF' && (
                                 <p className="text-sm mt-1 whitespace-pre-wrap break-words">
-                                    {linkifyText(msg.content, searchTerm)}
+                                    {linkifyText(msg.content, searchTerm, linkClass)}
                                 </p>
                             )}
                             </>
@@ -503,7 +507,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                     
                                      {msg.caption && !msg.is_view_once && (
                                         <p className="text-sm mt-1 mb-1 whitespace-pre-wrap break-words px-1 italic text-slate-500">
-                                            {linkifyText(msg.caption, searchTerm)}
+                                            {linkifyText(msg.caption, searchTerm, linkClass)}
                                         </p>
                                     )}
                                 </div>
@@ -584,7 +588,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                     {/* Caption for Grid */}
                                     {msg.caption && (
                                         <p className="text-sm mt-1 mb-1 whitespace-pre-wrap break-words px-1">
-                                            {linkifyText(msg.caption, searchTerm)}
+                                            {linkifyText(msg.caption, searchTerm, linkClass)}
                                             {msg.edited_at && (
                                                 <span className="text-[10px] opacity-60 ml-1">(edited)</span>
                                             )}
@@ -718,7 +722,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                 </div>
                                     {msg.caption && !msg.is_view_once && (
                                         <p className="text-sm mt-1 mb-1 whitespace-pre-wrap break-words px-1">
-                                            {linkifyText(msg.caption, searchTerm)}
+                                            {linkifyText(msg.caption, searchTerm, linkClass)}
                                             {msg.edited_at && (
                                                 <span className="text-[10px] opacity-60 ml-1">(edited)</span>
                                             )}
@@ -779,7 +783,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                     </div>
                                     {msg.caption && (
                                         <p className="text-sm mt-2 whitespace-pre-wrap break-words">
-                                            {linkifyText(msg.caption, searchTerm)}
+                                            {linkifyText(msg.caption, searchTerm, linkClass)}
                                         </p>
                                     )}
                                 </div>
@@ -839,12 +843,12 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                     </ReactMarkdown>
                                 ) : (
                                      <>
-                                        {linkifyText(msg.content, searchTerm)}
+                                        {linkifyText(msg.content, searchTerm, linkClass)}
                                         {msg.edited_at && (
                                             <span className="text-[10px] opacity-60 ml-1">(edited)</span>
                                         )}
                                         {/* Music Link Previews */}
-                                        {hasMusicLinks(msg.content) && renderMusicPreviews(msg.content)}
+                                        {hasMusicLinks(msg.content) && renderMusicPreviews(msg.content, isMe)}
                                      </>
                                 )}
                     
@@ -1545,7 +1549,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                                                  const name = msg.user_id === currentUser.id ? 'You' : (msg.display_name || 'Someone');
                                                  return `${name} pinned a message`;
                                              }
-                                             return linkifyText(msg.content);
+                                             return linkifyText(msg.content, '', "text-blue-600 dark:text-blue-400 hover:underline");
                                          })()}
                                      </span>
                                      <span className="text-[10px] text-slate-500 dark:text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">

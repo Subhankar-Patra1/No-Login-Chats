@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
  * YouTube inline preview/embed component
  * WhatsApp-style: Shows small thumbnail on side, expands to full player on click
  */
-export default function YouTubePreview({ url, videoId }) {
+export default function YouTubePreview({ url, videoId, isMe }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [metadata, setMetadata] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -44,10 +44,27 @@ export default function YouTubePreview({ url, videoId }) {
 
     const thumbnailUrl = `https://img.youtube.com/vi/${extractedId}/hqdefault.jpg`;
 
+    // Dynamic styles based on sender/receiver and theme
+    const containerClass = isMe
+        ? "bg-black/20 text-white" 
+        : "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700/50";
+        
+    const titleClass = isMe 
+        ? "text-white"
+        : "text-slate-800 dark:text-slate-200";
+        
+    const subtitleClass = isMe
+        ? "text-white/70"
+        : "text-slate-500 dark:text-slate-400";
+        
+    const closeBtnClass = isMe
+        ? "text-white/70 hover:text-white hover:bg-white/10"
+        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5";
+
     // If playing, show full embed
     if (isPlaying) {
         return (
-            <div className="-mx-2 -mb-1 mt-2 rounded-lg overflow-hidden bg-slate-800/80 min-w-[280px] sm:min-w-[320px]">
+            <div className={`-mx-2 -mb-1 mt-2 rounded-lg overflow-hidden w-full max-w-full ${isMe ? 'bg-black/20' : 'bg-slate-100 dark:bg-slate-900'}`}>
                 <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
                     <iframe
                         ref={iframeRef}
@@ -61,7 +78,7 @@ export default function YouTubePreview({ url, videoId }) {
                 {/* Close button */}
                 <button 
                     onClick={() => setIsPlaying(false)}
-                    className="w-full py-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors flex items-center justify-center gap-1"
+                    className={`w-full py-2 text-xs transition-colors flex items-center justify-center gap-1 ${closeBtnClass}`}
                 >
                     <span className="material-symbols-outlined text-sm">close</span>
                     Close player
@@ -73,7 +90,7 @@ export default function YouTubePreview({ url, videoId }) {
     // Compact preview (WhatsApp style) - thumbnail on right
     return (
         <div 
-            className="-mx-2 -mb-1 mt-2 rounded-lg overflow-hidden bg-slate-800/60 cursor-pointer hover:bg-slate-700/60 transition-colors border border-slate-700/30"
+            className={`-mx-2 -mb-1 mt-2 rounded-lg overflow-hidden cursor-pointer transition-colors border border-transparent ${containerClass} ${!isMe ? 'hover:bg-slate-200 dark:hover:bg-slate-800' : 'hover:bg-black/30'} border-opacity-50`}
             onClick={() => setIsPlaying(true)}
         >
             <div className="flex items-center gap-3 p-2">
@@ -81,19 +98,19 @@ export default function YouTubePreview({ url, videoId }) {
                 <div className="flex-1 min-w-0">
                     {isLoading ? (
                         <div className="animate-pulse">
-                            <div className="h-3 bg-slate-700 rounded w-3/4 mb-1.5"></div>
-                            <div className="h-2.5 bg-slate-700 rounded w-1/2"></div>
+                            <div className={`h-3 rounded w-3/4 mb-1.5 ${isMe ? 'bg-white/20' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
+                            <div className={`h-2.5 rounded w-1/2 ${isMe ? 'bg-white/20' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
                         </div>
                     ) : (
                         <>
-                            <h4 className="text-white font-medium text-xs line-clamp-2 leading-snug">
+                            <h4 className={`font-medium text-xs line-clamp-2 leading-snug ${titleClass}`}>
                                 {metadata?.title || 'YouTube Video'}
                             </h4>
                             <div className="flex items-center gap-1.5 mt-1">
                                 <svg className="w-3 h-3 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                                 </svg>
-                                <span className="text-[10px] text-slate-400 truncate">
+                                <span className={`text-[10px] truncate ${subtitleClass}`}>
                                     {metadata?.author || 'YouTube'}
                                 </span>
                             </div>
@@ -102,7 +119,7 @@ export default function YouTubePreview({ url, videoId }) {
                 </div>
                 
                 {/* Right: Thumbnail with play overlay */}
-                <div className="relative w-20 h-14 rounded-md overflow-hidden shrink-0 group/thumb bg-slate-700">
+                <div className={`relative w-20 h-14 rounded-md overflow-hidden shrink-0 group/thumb ${isMe ? 'bg-black/20' : 'bg-slate-200 dark:bg-slate-800'}`}>
                     <img 
                         src={thumbnailUrl}
                         alt=""

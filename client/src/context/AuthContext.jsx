@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useContext } from 'react';
+import LoadingScreen from '../components/LoadingScreen';
 
 const AuthContext = createContext(null);
 
@@ -19,6 +20,11 @@ export const AuthProvider = ({ children }) => {
             })
             .then(data => {
                 setUser(data.user);
+                // Artificial delay to show the nice loading screen if it was too fast?
+                // Or just let it be natural. User mentioned "loading bar completes".
+                // Our LoadingScreen simulates progress.
+                // Let's settle for at least 800ms to avoid flicker?
+                // But generally users want speed. Let's just set loading false.
                 setLoading(false);
             })
             .catch(() => {
@@ -46,9 +52,13 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
     };
 
+    if (loading) {
+        return <LoadingScreen />;
+    }
+
     return (
         <AuthContext.Provider value={{ user, token, login, logout, updateUser, loading }}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 };

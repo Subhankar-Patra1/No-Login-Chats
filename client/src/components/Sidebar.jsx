@@ -18,7 +18,7 @@ import PollIcon from './icons/PollIcon';
 export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, isLoading, onCreateRoom, onJoinRoom, user, onLogout, onRefresh, onRoomLocked }) {
     const { presenceMap, fetchStatuses } = usePresence();
     const { hasPasscode, lockApp } = useAppLock();
-    const { isRoomLocked, requestUnlock } = useChatLock();
+    const { isRoomLocked, requestUnlock, cancelUnlock } = useChatLock();
     const { theme, toggleTheme } = useTheme();
     const [tab, setTab] = useState('group'); // 'group' or 'direct'
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,7 +41,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
             return {};
         }
     });
-    
+
     // Update drafts when localStorage changes (on focus or custom event)
     useEffect(() => {
         const updateDrafts = () => {
@@ -395,6 +395,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                 requestUnlock(room);
                                 return;
                             }
+                            cancelUnlock(); // [FIX] Clear any pending lock screen from previous interaction
                             onSelectRoom(room);
                         }}
                         // disabled={loadingRoomId === room.id} // Div doesn't support disabled, handle via class or logic

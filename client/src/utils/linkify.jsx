@@ -22,7 +22,7 @@ export const textToHtml = (text) => {
 // ... (previous imports and helpers)
 
 // Main function to linkify text and render emojis
-export const linkifyText = (text, searchTerm = '') => {
+export const linkifyText = (text, searchTerm = '', linkClass) => {
     if (!text) return null;
 
     // Regex for mentions: @[Name](user:ID)
@@ -58,13 +58,16 @@ export const linkifyText = (text, searchTerm = '') => {
                 href = "https://" + href;
             }
 
+const defaultLinkClass = "text-white hover:text-slate-200 underline break-words decoration-violet-400 decoration-1 hover:decoration-2";
+            const finalLinkClass = linkClass !== undefined ? linkClass : defaultLinkClass;
+
             parts.push(
                 <a
                     key={globalKey++}
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-white hover:text-slate-200 underline break-words decoration-violet-400 decoration-1 hover:decoration-2"
+                    className={finalLinkClass}
                 >
                     {url}
                 </a>

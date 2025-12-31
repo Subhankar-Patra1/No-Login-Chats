@@ -47,13 +47,13 @@ export function hasMusicLinks(text) {
 /**
  * Render music preview components for detected links
  */
-export function renderMusicPreviews(text) {
+export function renderMusicPreviews(text, isMe) {
     const links = detectMusicLinks(text);
     
     if (links.length === 0) return null;
     
     return (
-        <div className="music-previews flex flex-col gap-2">
+        <div className="music-previews flex flex-col gap-2 max-w-[340px]">
             {links.map((link, index) => {
                 if (link.type === 'youtube') {
                     return (
@@ -61,6 +61,7 @@ export function renderMusicPreviews(text) {
                             key={`youtube-${index}-${link.videoId}`}
                             url={link.url}
                             videoId={link.videoId}
+                            isMe={isMe}
                         />
                     );
                 }
@@ -70,6 +71,7 @@ export function renderMusicPreviews(text) {
                         <SpotifyPreview 
                             key={`spotify-${index}-${link.id}`}
                             url={link.url}
+                            isMe={isMe}
                         />
                     );
                 }
