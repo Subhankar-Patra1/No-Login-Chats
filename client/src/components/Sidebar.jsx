@@ -13,6 +13,7 @@ import { renderTextWithEmojis } from '../utils/emojiRenderer';
 import SidebarContextMenu from './SidebarContextMenu';
 import { ChatListSkeleton } from './SkeletonLoaders';
 import PollIcon from './icons/PollIcon';
+import emptySidebarGif from '../assets/empty_sidebar.gif'; // [NEW]
 
 
 export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId, isLoading, onCreateRoom, onJoinRoom, user, onLogout, onRefresh, onRoomLocked }) {
@@ -384,7 +385,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                         ) : (
                             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                                 <img 
-                                    src="/brief.gif" 
+                                    src={emptySidebarGif} 
                                     alt="No chats" 
                                     className="w-28 h-28 object-contain opacity-90 grayscale-[0.2] mix-blend-multiply dark:mix-blend-screen dark:invert dark:hue-rotate-180 dark:opacity-80" 
                                 />
