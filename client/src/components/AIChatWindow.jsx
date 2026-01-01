@@ -16,27 +16,29 @@ function WelcomeView({ onPromptClick }) {
     ];
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto min-h-0 w-full">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-fuchsia-100 to-purple-100 dark:from-fuchsia-900/20 dark:to-purple-900/20 flex items-center justify-center mb-6 shadow-xl shadow-fuchsia-500/10 shrink-0">
-                <SparkleLogo className="w-12 h-12" />
-            </div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 mb-3 text-center shrink-0">
-                Welcome to Sparkle AI
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 leading-relaxed shrink-0">
-                I'm your personal AI assistant. Ask me anything, or pick a suggestion below to get started!
-            </p>
+        <div className="flex-1 flex flex-col items-center justify-start p-8 z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto min-h-0 w-full">
+            <div className="my-auto flex flex-col items-center">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-fuchsia-100 to-purple-100 dark:from-fuchsia-900/20 dark:to-purple-900/20 flex items-center justify-center mb-6 shadow-xl shadow-fuchsia-500/10 shrink-0">
+                    <SparkleLogo className="w-12 h-12" />
+                </div>
+                <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 mb-3 text-center shrink-0">
+                    Welcome to Sparkle AI
+                </h1>
+                <p className="text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 leading-relaxed shrink-0">
+                    I'm your personal AI assistant. Ask me anything, or pick a suggestion below to get started!
+                </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg shrink-0">
-                {suggested.map((text, i) => (
-                    <button
-                        key={i}
-                        onClick={() => onPromptClick(text)}
-                        className="p-4 text-sm text-left bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl hover:bg-fuchsia-50 dark:hover:bg-fuchsia-900/20 hover:border-fuchsia-200 dark:hover:border-fuchsia-700/50 transition-all duration-200 shadow-sm hover:shadow-md group"
-                    >
-                        <span className="text-slate-700 dark:text-slate-200 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 font-medium">{text}</span>
-                    </button>
-                ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg shrink-0">
+                    {suggested.map((text, i) => (
+                        <button
+                            key={i}
+                            onClick={() => onPromptClick(text)}
+                            className="p-4 text-sm text-left bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl hover:bg-fuchsia-50 dark:hover:bg-fuchsia-900/20 hover:border-fuchsia-200 dark:hover:border-fuchsia-700/50 transition-all duration-200 shadow-sm hover:shadow-md group"
+                        >
+                            <span className="text-slate-700 dark:text-slate-200 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 font-medium">{text}</span>
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>
     );
