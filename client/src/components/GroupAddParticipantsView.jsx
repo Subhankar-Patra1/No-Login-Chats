@@ -12,7 +12,7 @@ const GroupAddParticipantsView = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [adding, setAdding] = useState(false);
+    const [addingUserId, setAddingUserId] = useState(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -41,7 +41,7 @@ const GroupAddParticipantsView = ({
     }, [searchTerm, room.id, token]);
 
     const handleAdd = async (userId) => {
-        setAdding(true);
+        setAddingUserId(userId);
         setError('');
         try {
             await onAddMember(userId, true);
@@ -52,7 +52,7 @@ const GroupAddParticipantsView = ({
         } catch (err) {
             setError(err.message || 'Failed to add member');
         } finally {
-            setAdding(false);
+            setAddingUserId(null);
         }
     };
 
@@ -111,7 +111,7 @@ const GroupAddParticipantsView = ({
                     <div
                         key={user.id}
                         className="group w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer rounded-xl"
-                        onClick={() => !adding && handleAdd(user.id)}
+                        onClick={() => !addingUserId && handleAdd(user.id)}
                     >
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0 transition-colors">
                             {user.avatar_thumb_url ? (
@@ -124,7 +124,7 @@ const GroupAddParticipantsView = ({
                             <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate transition-colors">{renderTextWithEmojis(user.display_name)}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-500 truncate transition-colors">{user.username.startsWith('@') ? user.username : '@' + user.username}</div>
                         </div>
-                        {adding ? (
+                        {addingUserId === user.id ? (
                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-500 border-t-transparent"></div>
                         ) : (
                             <button className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-600/10 text-violet-600 dark:text-violet-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-violet-600 hover:text-white dark:hover:bg-violet-600 dark:hover:text-white">

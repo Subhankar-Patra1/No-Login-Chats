@@ -265,12 +265,13 @@ export default function ImagePreviewModal({ files, onClose, onSend, recipientNam
                 URL.revokeObjectURL(url);
             }
 
-            // [MODIFIED] Pass structured payload instead of separate args
-            await onSend(payload, isViewOnce); // Await to keep processing true until done
+            // [FIX] Fire off the send (don't await) and close modal immediately
+            // This allows the message to appear in chat right away with upload progress
+            onSend(payload, isViewOnce);
+            onClose(); // Close modal immediately
             
         } catch (e) {
             console.error(e);
-        } finally {
             setIsProcessing(false);
             processingRef.current = false;
         }

@@ -55,19 +55,33 @@
   background: transparent;
 }
 
+/* Light mode scrollbar */
 ::-webkit-scrollbar-thumb {
-  background: #334155; /* slate-700 */
+  background: #cbd5e1; /* slate-300 - light mode */
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569; /* slate-600 */
+  background: #94a3b8; /* slate-400 - light mode hover */
+}
+
+/* Dark mode scrollbar */
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155; /* slate-700 - dark mode */
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* slate-600 - dark mode hover */
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: #cbd5e1 transparent; /* light mode */
+}
+
+html.dark * {
+  scrollbar-color: #334155 transparent; /* dark mode */
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
