@@ -15,7 +15,7 @@ export const textToHtml = (text) => {
     const regex = emojiRegex();
     return text.replace(regex, (match) => {
         const hex = toHex(match);
-        return `<img src="https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png" alt="${match}" class="w-6 h-6 inline-block align-middle mb-[3px]" style="margin: 0 1px;" draggable="false" />`;
+        return `<img src="https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png" alt="${match}" class="w-[1.5em] h-[1.45em] inline-block select-none pointer-events-none" style="vertical-align: -0.25em; margin: 0 1px;" draggable="false" />`;
     });
 };
 
@@ -105,16 +105,86 @@ const defaultLinkClass = "text-white hover:text-slate-200 underline break-words 
 
     const processTextSegment = (segment) => {
         if (!segment) return;
+        
+        // Bold text: *text* or **text** - NO space allowed adjacent to asterisks inside
+        // *text* = bold, but *text * or * text* = not bold
+        const boldRegex = /\*\*(?!\s)([^*]+?)(?<!\s)\*\*|\*(?!\s)([^*]+?)(?<!\s)\*/g;
+        let boldMatch;
+        let boldLastIndex = 0;
+        
+        while ((boldMatch = boldRegex.exec(segment)) !== null) {
+            const beforeBold = segment.slice(boldLastIndex, boldMatch.index);
+            
+            // Process text before bold (emojis + highlight)
+            if (beforeBold) {
+                processEmojisAndHighlight(beforeBold);
+            }
+            
+            // Render bold text (also process emojis inside bold)
+            // boldMatch[1] = double asterisk content, boldMatch[2] = single asterisk content
+            const boldContent = boldMatch[1] || boldMatch[2];
+            parts.push(
+                <strong key={globalKey++} className="font-bold">
+                    {processEmojisInline(boldContent)}
+                </strong>
+            );
+            
+            boldLastIndex = boldRegex.lastIndex;
+        }
+        
+        // Process remaining text after last bold
+        if (boldLastIndex < segment.length) {
+            processEmojisAndHighlight(segment.slice(boldLastIndex));
+        }
+    };
+    
+    // Helper to process emojis and return inline elements (for inside bold)
+    const processEmojisInline = (text) => {
+        if (!text) return null;
+        const regex = emojiRegex();
+        const result = [];
+        let lastIndex = 0;
+        let match;
+        
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                result.push(text.substring(lastIndex, match.index));
+            }
+            const hex = toHex(match[0]);
+            result.push(
+                <img
+                    key={globalKey++}
+                    src={`https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png`}
+                    alt={match[0]}
+                    className="w-[1.45em] h-[1.45em] inline-block select-none pointer-events-none"
+                    style={{ verticalAlign: '-0.25em', margin: '0 1px' }}
+                    draggable="false" 
+                    loading="lazy"
+                />
+            );
+            lastIndex = regex.lastIndex;
+        }
+        
+        if (lastIndex < text.length) {
+            result.push(text.substring(lastIndex));
+        }
+        
+        return result.length > 0 ? result : text;
+    };
+    
+    // Process emojis and highlight (original logic)
+    const processEmojisAndHighlight = (text) => {
+        if (!text) return;
         const regex = emojiRegex();
         let lastEmojiIndex = 0;
         let emojiMatch;
 
-        while ((emojiMatch = regex.exec(segment)) !== null) {
+        while ((emojiMatch = regex.exec(text)) !== null) {
             const emojiChar = emojiMatch[0];
             const index = emojiMatch.index;
 
             if (index > lastEmojiIndex) {
-               const sub = segment.substring(lastEmojiIndex, index);
+               const sub = text.substring(lastEmojiIndex, index);
                const highlighted = highlightText(sub);
                if (Array.isArray(highlighted)) {
                    highlighted.forEach(h => parts.push(<span key={globalKey++}>{h}</span>));
@@ -129,7 +199,8 @@ const defaultLinkClass = "text-white hover:text-slate-200 underline break-words 
                     key={globalKey++}
                     src={`https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png`}
                     alt={emojiChar}
-                    className="w-5 h-5 inline-block align-text-bottom mx-[1px] select-none"
+                    className="w-[1.45em] h-[1.45em] inline-block select-none pointer-events-none"
+                    style={{ verticalAlign: '-0.25em', margin: '0 1px' }}
                     draggable="false" 
                     loading="lazy"
                     onError={(e) => {
@@ -145,8 +216,8 @@ const defaultLinkClass = "text-white hover:text-slate-200 underline break-words 
             lastEmojiIndex = regex.lastIndex;
         }
 
-        if (lastEmojiIndex < segment.length) {
-            const sub = segment.substring(lastEmojiIndex);
+        if (lastEmojiIndex < text.length) {
+            const sub = text.substring(lastEmojiIndex);
             const highlighted = highlightText(sub);
              if (Array.isArray(highlighted)) {
                    highlighted.forEach(h => parts.push(<span key={globalKey++}>{h}</span>));

@@ -908,7 +908,7 @@ export default function Dashboard() {
                             </div>
 
                             <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-violet-800 to-slate-900 dark:from-white dark:via-violet-200 dark:to-white mb-3">
-                                Welcome, {renderTextWithEmojis(user?.display_name || 'Guest')}
+                                Welcome, {renderTextWithEmojis(user?.display_name || 'Guest', '1.1em')}
                             </h2>
                             <p className="text-slate-500 dark:text-slate-400 text-lg mb-8 leading-relaxed">
                                 Select a conversation from the sidebar or start a new room to begin secure messaging.

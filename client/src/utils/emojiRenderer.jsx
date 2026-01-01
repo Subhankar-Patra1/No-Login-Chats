@@ -28,7 +28,7 @@ export const getAppleEmojiUrl = (emojiChar) => {
     return `https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${hex}.png`;
 };
 
-export const renderTextWithEmojis = (text, size = '1.25em') => {
+export const renderTextWithEmojis = (text, size = '1.45em') => {
     if (!text) return text;
     
     // If text is not a string, return as is
@@ -51,8 +51,8 @@ export const renderTextWithEmojis = (text, size = '1.25em') => {
                     key={`emoji-${index}`}
                     src={getAppleEmojiUrl(emojiChar)} 
                     alt={emojiChar} 
-                    className="inline-block align-middle select-none pointer-events-none object-contain" 
-                    style={{ width: size, height: size, verticalAlign: 'middle' }}
+                    className="inline-block select-none pointer-events-none object-contain" 
+                    style={{ width: size, height: size, verticalAlign: '-0.25em' }}
                     draggable="false"
                     onError={(e) => {
                         e.target.style.display = 'none';
@@ -82,7 +82,7 @@ export const renderTextWithEmojisToHtml = (text) => {
             const emojiChar = matches[index];
             const url = getAppleEmojiUrl(emojiChar);
             // Updated class to match ProfilePanel styling needs
-            html += `<img src="${url}" alt="${emojiChar}" class="inline-block align-middle select-none pointer-events-none object-contain" style="width: 1.25em; height: 1.25em; vertical-align: middle;" draggable="false" />`;
+            html += `<img src="${url}" alt="${emojiChar}" class="inline-block select-none pointer-events-none object-contain" style="width: 1.45em; height: 1.45em; vertical-align: -0.25em;" draggable="false" />`;
         }
     });
     return html;

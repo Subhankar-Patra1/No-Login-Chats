@@ -45,6 +45,16 @@
   }
 }
 
+/* Bold text live preview in editor */
+.bold-star {
+  opacity: 0.3;
+  color: #94a3b8; /* slate-400 */
+}
+.bold-content {
+  font-weight: 800;
+  color: #f8fafc; /* slate-50 - bright */
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -152,7 +152,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                 .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Link [text](url)
                 .replace(/^#+\s+/g, '');         // Heading #
 
-            return renderTextWithEmojis(stripped, '1.65em');
+            return renderTextWithEmojis(stripped);
         });
     };
 
@@ -519,7 +519,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                                             <span className="truncate">
                                                                 {room.last_message_attachments_count > 1 
                                                                     ? `${room.last_message_attachments_count} Photos`
-                                                                    : (room.last_message_caption ? renderTextWithEmojis(room.last_message_caption, '1.65em') : 'Photo')}
+                                                                    : (room.last_message_caption ? renderTextWithEmojis(room.last_message_caption) : 'Photo')}
                                                             </span>
                                                         </>
                                                     )}
@@ -530,7 +530,7 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                                     <span className="material-symbols-outlined text-[18px] translate-y-[0.5px]">description</span>
                                                         <span className="truncate">
                                                             {room.last_message_file_name || 'File'}
-                                                            {room.last_message_caption ? ` • ${renderTextWithEmojis(room.last_message_caption, '1.65em')}` : ''}
+                                                            {room.last_message_caption ? ` • ${renderTextWithEmojis(room.last_message_caption)}` : ''}
                                                         </span>
                                                 </span>
                                              ) :
@@ -545,17 +545,17 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                              room.last_message_type === 'poll_vote' ? (
                                                  <span className="flex items-center gap-1">
                                                      <span className="shrink-0">
-                                                         {room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name, '1.65em')}
+                                                         {room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name)}
                                                      </span>
                                                      <span>voted in:</span>
                                                      <PollIcon className="w-4 h-4 shrink-0" />
-                                                     <span className="truncate">{renderTextWithEmojis(room.last_message_poll_question, '1.1em') || 'Poll'}</span>
+                                                     <span className="truncate">{renderTextWithEmojis(room.last_message_poll_question) || 'Poll'}</span>
                                                  </span>
                                              ) :
                                              room.last_message_type === 'poll' ? (
                                                  <span className="flex items-center gap-1">
                                                      {room.type === 'group' && room.last_message_sender_name && (
-                                                        <span className="shrink-0">{room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name, '1.65em')}:</span>
+                                                        <span className="shrink-0">{room.last_message_sender_id === user.id ? 'You' : renderTextWithEmojis(room.last_message_sender_name)}:</span>
                                                     )}
                                                      <PollIcon className="w-4 h-4 shrink-0" />
                                                      <span className="truncate">{renderTextWithEmojis(room.last_message_poll_question, '1.1em') || 'Poll'}</span>

@@ -795,7 +795,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         if (typingUsers.length === 1) {
             return (
                 <span className="truncate max-w-[200px] flex items-center gap-1">
-                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span> 
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name, '1.1em')}</span> 
                     <span className="shrink-0">is typing...</span>
                 </span>
             );
@@ -803,18 +803,18 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         if (typingUsers.length === 2) {
             return (
                 <span className="truncate max-w-[300px] flex items-center gap-1">
-                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span> 
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name, '1.1em')}</span> 
                     <span className="shrink-0">and</span>
-                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name)}</span> 
+                    <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name, '1.1em')}</span> 
                     <span className="shrink-0">are typing...</span>
                 </span>
             );
         }
         return (
             <span className="truncate max-w-[300px] flex items-center gap-1">
-                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name)}</span>
+                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[0].name, '1.1em')}</span>
                 <span className="shrink-0">,</span>
-                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name)}</span>
+                <span className="font-semibold truncate">{renderTextWithEmojis(typingUsers[1].name, '1.1em')}</span>
                 <span className="shrink-0">, and {typingUsers.length - 2} others are typing...</span>
             </span>
         );
@@ -1264,6 +1264,17 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             />
             {/* Background Pattern */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-violet-200/40 via-gray-50 to-gray-50 dark:from-violet-900/20 dark:via-slate-950 dark:to-slate-950 pointer-events-none transition-colors" />
+            
+            {/* Doodle Background Pattern */}
+            <div 
+                className="absolute inset-0 pointer-events-none z-0 invert dark:invert-0 opacity-[0.08]"
+                style={{
+                    backgroundImage: 'url(/chat-doodle.png)',
+                    backgroundRepeat: 'repeat',
+                    backgroundSize: '412.5px 749.25px'
+                }}
+                aria-hidden="true"
+            />
 
             {/* Header */}
             <div className="border-b border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md flex flex-col shadow-sm z-10 transition-colors">
@@ -1524,7 +1535,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     roomId={room.id}
                 />
             ) : (
-                <div className="p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 z-10 flex justify-center items-center h-[88px] transition-colors duration-300">
+                <div className="p-4 bg-transparent z-10 flex justify-center items-center h-[88px] transition-colors duration-300">
                     <div className="bg-slate-100/80 dark:bg-slate-800/80 px-6 py-3 rounded-full flex items-center gap-2 border border-slate-200 dark:border-slate-700 shadow-lg">
                         <span className="material-symbols-outlined text-slate-400 text-sm">lock</span>
                         <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">

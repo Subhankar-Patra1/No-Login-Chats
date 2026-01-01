@@ -236,6 +236,71 @@ export default function MessageInput({
         }
     };
 
+    // [NEW] Apply live bold formatting to HTML for preview
+    const applyBoldFormatting = (htmlContent) => {
+        if (!htmlContent) return '';
+        
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+
+        // Cleanup: remove existing bold-star and bold-content spans to re-evaluate
+        tempDiv.querySelectorAll('.bold-star, .bold-content').forEach(span => {
+            span.replaceWith(...span.childNodes);
+        });
+        tempDiv.normalize();
+
+        const html = tempDiv.innerHTML;
+        // Regex for bold that permits tags (like <img>) inside the content
+        // Pattern: * followed by non-space, then any chars/tags (no block tags), ending with non-space follow by *
+        // We use lookaheads/lookbehinds for the start/end non-space check.
+        const boldRegex = /\*\*(?!(?:\s|&nbsp;))((?:(?!<\/?(?:div|p|br)[^>]*>)[^*]|<[^>]+>)+?)(?<!(?:\s|&nbsp;))\*\*|\*(?!(?:\s|&nbsp;))((?:(?!<\/?(?:div|p|br)[^>]*>)[^*]|<[^>]+>)+?)(?<!(?:\s|&nbsp;))\*/g;
+        
+        const newHtml = html.replace(boldRegex, (match, double, single) => {
+            const stars = match.startsWith('**') ? '**' : '*';
+            const content = double || single;
+            return `<span class="bold-star">${stars}</span><span class="bold-content">${content}</span><span class="bold-star">${stars}</span>`;
+        });
+        
+        return newHtml;
+    };
+
+    // [NEW] Cursor Preservation Helpers
+    const getCaretOffset = (element) => {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return 0;
+        const range = selection.getRangeAt(0);
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(element);
+        preCaretRange.setEnd(range.endContainer, range.endOffset);
+        return preCaretRange.toString().length;
+    };
+
+    const setCaretOffset = (element, offset) => {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        let currentOffset = 0;
+
+        const traverseNodes = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const nodeLength = node.textContent.length;
+                if (currentOffset + nodeLength >= offset) {
+                    range.setStart(node, offset - currentOffset);
+                    range.setEnd(node, offset - currentOffset);
+                    return true;
+                }
+                currentOffset += nodeLength;
+            } else {
+                for (let i = 0; i < node.childNodes.length; i++) {
+                    if (traverseNodes(node.childNodes[i])) return true;
+                }
+            }
+            return false;
+        };
+
+        traverseNodes(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    };
 
     // Save selection whenever cursor moves
     const saveSelection = () => {
@@ -439,7 +504,22 @@ export default function MessageInput({
 
     const handleChange = (evt) => {
         const newHtml = evt.target.value ?? evt.target.innerHTML;
-        setHtml(newHtml);
+        
+        // [NEW] Apply bold formatting preview
+        const formatted = applyBoldFormatting(newHtml);
+        
+        // If formatting changed the content, we need to save/restore caret
+        if (formatted !== newHtml && editorRef.current) {
+            const offset = getCaretOffset(editorRef.current);
+            setHtml(formatted);
+            // We use a timeout to let React update the DOM before restoring caret
+            setTimeout(() => {
+                if (editorRef.current) setCaretOffset(editorRef.current, offset);
+            }, 0);
+        } else {
+            setHtml(newHtml);
+        }
+        
         saveSelection();
 
         // Mention Detection
@@ -573,7 +653,7 @@ export default function MessageInput({
     // Render Recording UI if active
     if (isRecording || isReviewing) {
         return (
-            <div className="p-2 md:p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 z-10 relative transition-colors duration-300">
+            <div className="p-2 md:p-4 bg-transparent z-10 relative transition-colors duration-300">
                 <div className="flex gap-3 max-w-4xl mx-auto items-center justify-between h-[56px] px-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none transition-colors">
                     
                     {/* Left Side: Status / Delete */}
@@ -664,7 +744,7 @@ export default function MessageInput({
     };
 
     return (
-        <div className="p-2 md:p-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 z-10 relative transition-colors duration-300">
+        <div className="p-2 md:p-4 bg-transparent z-10 relative transition-colors duration-300">
             <form onSubmit={handleSubmit} className="flex gap-3 max-w-4xl mx-auto items-end">
                 <div className="flex-1 flex flex-col gap-1">
                     {/* Editing Bar */}
@@ -788,9 +868,9 @@ export default function MessageInput({
                     )}
 
                     <div className={`
-                        relative bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-violet-500/50 focus-within:border-violet-500/50 transition-all flex flex-col
+                        relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 transition-all flex flex-col focus-within:ring-2 focus-within:ring-violet-500/50 focus-within:border-violet-500/50
                         ${replyTo ? 'rounded-b-2xl rounded-t-md' : 'rounded-2xl'} 
-                        shadow-sm dark:shadow-none
+                        shadow-md dark:shadow-none
                     `}>
                         {/* Pending GIF Preview */}
                         {pendingGif && (

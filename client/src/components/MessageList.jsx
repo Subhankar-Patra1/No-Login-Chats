@@ -1598,16 +1598,6 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
             }}
         >
             {/* Doodle Background Pattern */}
-            <div 
-                className="absolute inset-0 pointer-events-none z-0 invert dark:invert-0"
-                style={{
-                    backgroundImage: 'url(/chat-doodle.png)',
-                    backgroundRepeat: 'repeat',
-                    backgroundSize: '412.5px 749.25px',
-                    opacity: 0.11
-                }}
-                aria-hidden="true"
-            />
 
             {/* Empty State - outside scroll container */}
             {!hasMessages && (
