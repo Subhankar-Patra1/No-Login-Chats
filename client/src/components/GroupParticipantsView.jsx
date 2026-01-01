@@ -84,7 +84,7 @@ const GroupParticipantsViewContent = ({
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-slate-800 dark:text-slate-200 flex items-center gap-2 truncate transition-colors">
-                                        {renderTextWithEmojis(member.display_name)}
+                                        <span>{renderTextWithEmojis(member.display_name)}</span>
                                         {String(member.id) === String(currentUser?.id) && <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase font-bold tracking-wider shrink-0 transition-colors">You</span>}
                                     </p>
                                     <div className="flex items-center gap-2 mt-0.5">

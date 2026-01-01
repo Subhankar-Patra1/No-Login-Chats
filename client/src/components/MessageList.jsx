@@ -336,7 +336,7 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                                     </div>
                                 ) : (
                                     <div className="text-xs opacity-80 line-clamp-2">
-                                        {renderTextWithEmojis(msg.replyTo.text)}
+                                        {linkifyText(msg.replyTo.text)}
                                     </div>
                                 )}
                             </div>

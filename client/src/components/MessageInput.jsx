@@ -4,6 +4,7 @@ import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
 import useAudioRecorder from '../utils/useAudioRecorder';
 import { renderTextWithEmojis, renderTextWithEmojisToHtml } from '../utils/emojiRenderer';
+import { linkifyText } from '../utils/linkify';
 
 
 
@@ -772,7 +773,7 @@ export default function MessageInput({
                                 ) : (
                                     <div className="flex flex-col">
                                         <span className="text-sm font-semibold text-violet-600 dark:text-violet-300">{renderTextWithEmojis(replyTo.sender)}</span>
-                                        <span className="text-sm text-slate-600 dark:text-slate-300 break-words line-clamp-2 max-h-[3em]">{renderTextWithEmojis(replyTo.text)}</span>
+                                        <span className="text-sm text-slate-600 dark:text-slate-300 break-words line-clamp-2 max-h-[3em]">{linkifyText(replyTo.text, '', 'text-violet-600 dark:text-violet-400 hover:underline')}</span>
                                     </div>
                                 )}
                             </div>
