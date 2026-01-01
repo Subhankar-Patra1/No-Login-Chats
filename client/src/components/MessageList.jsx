@@ -1276,8 +1276,8 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                 
                 <div className={`text-[10px] mt-1 px-1 flex items-center justify-end gap-1 select-none transition-opacity ${
                     (msg.status === 'sending' || msg.is_pinned) 
-                        ? 'opacity-100 text-slate-500 dark:text-slate-400' 
-                        : `opacity-0 group-hover:opacity-100 ${isMe ? 'text-slate-400 dark:text-slate-500' : 'text-slate-400 dark:text-slate-500'}`
+                        ? 'opacity-100 text-slate-600 dark:text-slate-300' 
+                        : `opacity-0 group-hover:opacity-100 ${isMe ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 dark:text-slate-400'}`
                 }`}>
                     {msg.is_pinned && (
                         <span className="material-symbols-outlined text-[12px] -rotate-45" title="Pinned">keep</span>
@@ -1597,6 +1597,18 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                 }
             }}
         >
+            {/* Doodle Background Pattern */}
+            <div 
+                className="absolute inset-0 pointer-events-none z-0 invert dark:invert-0"
+                style={{
+                    backgroundImage: 'url(/chat-doodle.png)',
+                    backgroundRepeat: 'repeat',
+                    backgroundSize: '412.5px 749.25px',
+                    opacity: 0.11
+                }}
+                aria-hidden="true"
+            />
+
             {/* Empty State - outside scroll container */}
             {!hasMessages && (
                 <div className="absolute inset-0 flex items-center justify-center z-10">
@@ -1607,7 +1619,7 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
             {/* Scrollable Messages Container - only show when there are messages */}
             <div 
                 ref={scrollRef}
-                className={`absolute inset-0 p-4 sm:p-6 space-y-4 sm:space-y-6 custom-scrollbar z-0 ${
+                className={`absolute inset-0 p-4 sm:p-6 space-y-4 sm:space-y-6 custom-scrollbar z-[1] ${
                     hasMessages ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
                 }`}
                 onScroll={handleScroll}
