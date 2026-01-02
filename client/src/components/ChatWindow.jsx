@@ -1333,7 +1333,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
             />
 
             {/* Header */}
-            <div className="border-b border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md flex flex-col shadow-sm z-10 transition-colors">
+            <div className="sticky top-0 z-50 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md flex flex-col shadow-sm transition-colors">
                 {/* Main Header Row */}
                 <div className="p-4 flex items-center gap-4">
                     <button 

@@ -6,10 +6,13 @@
 
 @layer base {
   html, body {
-    @apply h-full w-full;
+    @apply h-full w-full overflow-hidden;
+    position: fixed;
+    inset: 0;
   }
   body {
-    @apply font-sans bg-gray-50 text-slate-900;
+    @apply font-sans bg-gray-50 text-slate-900 overflow-hidden;
+    overscroll-behavior-y: none;
   }
   
   /* 
