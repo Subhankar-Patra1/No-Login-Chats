@@ -30,7 +30,7 @@ export default function LoadingScreen() {
                 <div className="relative group">
                     <div className="absolute inset-0 bg-violet-500 blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500 rounded-full" />
                     <img 
-                        src="/logo.png" 
+                        src="/logo.svg" 
                         alt="Cipher" 
                         className="w-24 h-24 object-contain relative z-10 drop-shadow-2xl animate-breathe" 
                     />
