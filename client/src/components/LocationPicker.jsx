@@ -63,6 +63,28 @@ export default function LocationPicker({ isOpen, onClose, onSend }) {
         );
     };
 
+    const getIpLocation = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('https://ipapi.co/json/');
+            if (!res.ok) throw new Error('IP API failed');
+            const data = await res.json();
+            
+            if (data.latitude && data.longitude) {
+                setLocation({ latitude: data.latitude, longitude: data.longitude });
+                setAddress(`${data.city}, ${data.region}, ${data.country_name} (Approx. based on IP)`);
+                setLoading(false);
+            } else {
+                throw new Error('Invalid IP data');
+            }
+        } catch (ipErr) {
+            console.error('IP Fallback failed:', ipErr);
+            setError('Approximate location also failed. Please check your connection.');
+            setLoading(false);
+        }
+    };
+
     const handleSend = () => {
         if (location) {
             onSend({
@@ -107,15 +129,27 @@ export default function LocationPicker({ isOpen, onClose, onSend }) {
                             <p className="text-slate-500 dark:text-slate-400">Getting your location...</p>
                         </div>
                     ) : error ? (
-                        <div className="flex flex-col items-center justify-center py-8 gap-4">
+                        <div className="flex flex-col items-center justify-center py-6 gap-4">
                             <span className="material-symbols-outlined text-4xl text-red-500">location_off</span>
-                            <p className="text-red-500 text-center">{error}</p>
-                            <button
-                                onClick={getCurrentLocation}
-                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                            >
-                                Try Again
-                            </button>
+                            <p className="text-red-500 text-center text-sm px-4">{error}</p>
+                            
+                            <div className="flex flex-col w-full gap-2 px-4 mt-2">
+                                <button
+                                    onClick={getCurrentLocation}
+                                    className="w-full py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors flex items-center justify-center gap-2 text-sm font-semibold shadow-md active:scale-95"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">my_location</span>
+                                    Try GPS Again
+                                </button>
+                                
+                                <button
+                                    onClick={getIpLocation}
+                                    className="w-full py-2.5 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2 text-sm font-medium active:scale-95"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">public</span>
+                                    Use Approximate Location
+                                </button>
+                            </div>
                         </div>
                     ) : location ? (
                         <div className="space-y-4">
