@@ -39,6 +39,7 @@ const AppContent = () => {
                         </PublicRoute>
                     } />
                     <Route path="/invite" element={<InvitePage />} />
+                    <Route path="/landing" element={<Navigate to="/" replace />} />
                     <Route path="/" element={
                             <PublicRoute>
                             <LandingPage />

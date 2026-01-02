@@ -142,7 +142,7 @@ export default function Auth() {
     };
 
     return (
-        <div className="h-screen w-full grid grid-cols-1 lg:grid-cols-2 bg-slate-950 overflow-hidden">
+        <div className="h-[100dvh] w-full grid grid-cols-1 lg:grid-cols-2 bg-slate-950 overflow-hidden">
             {/* Left Side - Visual */}
             <div className="relative hidden lg:flex flex-col items-center justify-center p-8 overflow-hidden bg-slate-900 h-full">
                 {/* Background Gradients */}

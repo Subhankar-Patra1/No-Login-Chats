@@ -40,7 +40,10 @@ const LandingPage = () => {
             handleMouseOver({ target: word });
         });
 
+        document.documentElement.classList.add('landing-scroll');
+        
         return () => {
+             document.documentElement.classList.remove('landing-scroll');
              hackerWords.forEach(word => {
                 word.removeEventListener('mouseover', handleMouseOver);
                 clearInterval(word.interval);
@@ -49,7 +52,7 @@ const LandingPage = () => {
     }, []);
 
     return (
-        <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-deep-charcoal font-mono text-gray-200 antialiased scanline">
+        <div className="relative flex min-h-screen w-full flex-col bg-deep-charcoal font-mono text-gray-200 antialiased scanline">
             <div className="grid-background"></div>
 
             <header className="sticky top-0 z-50 w-full bg-deep-charcoal/80 backdrop-blur-sm border-b border-accent-green/20">
@@ -289,7 +292,7 @@ const LandingPage = () => {
                     <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
                         <div className="flex items-center gap-3">
                             <div className="size-6 text-accent-green text-glow-green">
-                                <img src="/logo.svg" alt="Cipher Logo" className="size-6" />
+                                <img src="/logo.png" alt="Cipher Logo" className="size-6" />
                             </div>
                             <h2 className="text-lg font-bold text-gray-100 text-glow-green">Cipher</h2>
                         </div>
