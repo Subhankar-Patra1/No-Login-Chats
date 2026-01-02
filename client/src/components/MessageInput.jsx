@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
@@ -45,6 +45,9 @@ export default function MessageInput({
 }) {
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
+    const [showAttachMenu, setShowAttachMenu] = useState(false);
+    const [isClosingAttach, setIsClosingAttach] = useState(false);
+    const attachMenuRef = useRef(null);
     
     // [NEW] Mention State
     const [showMentionPopup, setShowMentionPopup] = useState(false);
@@ -308,8 +311,24 @@ export default function MessageInput({
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
-                lastRange.current = range.cloneRange();
+            lastRange.current = range.cloneRange();
             }
+        }
+    };
+
+    const closeAttachMenu = useCallback(() => {
+        setIsClosingAttach(true);
+        setTimeout(() => {
+            setShowAttachMenu(false);
+            setIsClosingAttach(false);
+        }, 350); // Increased to allow staggered exit (max delay 150ms + duration 200ms)
+    }, []);
+
+    const handleToggleAttach = () => {
+        if (showAttachMenu) {
+            closeAttachMenu();
+        } else {
+            setShowAttachMenu(true);
         }
     };
 
@@ -318,11 +337,14 @@ export default function MessageInput({
             if (pickerRef.current && !pickerRef.current.contains(event.target)) {
                 setShowEmoji(false);
             }
+            if (attachMenuRef.current && !attachMenuRef.current.contains(event.target)) {
+                if (showAttachMenu) closeAttachMenu();
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [showAttachMenu, closeAttachMenu]);
 
     const handleSelectMention = (user) => {
         const selection = window.getSelection();
@@ -902,7 +924,7 @@ export default function MessageInput({
 
                         
                         
-                        <div className="flex items-end relative">
+                        <div className="flex items-center relative">
                          {showMentionPopup && filteredMembers.length > 0 && (
                             <div className="absolute bottom-full mb-2 left-0 z-50 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
                                 <div className="p-1 max-h-[200px] overflow-y-auto custom-scrollbar">
@@ -970,11 +992,11 @@ export default function MessageInput({
                                 </div>
                             )}
 
-                            <div className="pr-2 pb-2 flex items-center gap-1">
+                            <div className="pr-2 flex items-center gap-1">
                                 <button
                                     type="button"
                                     onClick={() => setShowEmoji(!showEmoji)}
-                                    className={`p-2 transition-colors flex items-center justify-center rounded-lg ${
+                                    className={`w-10 h-10 transition-colors flex items-center justify-center rounded-full ${
                                         showEmoji 
                                         ? 'text-violet-500 bg-violet-50 dark:bg-slate-800 dark:text-white' 
                                         : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -983,73 +1005,130 @@ export default function MessageInput({
                                 >
                                     <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
                                 </button>
-                                
+
                                 {!isAi && (
-                                    <>
+                                    <div className="relative" ref={attachMenuRef}>
                                         <button
                                             type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
-                                            title="Attach Image"
+                                            onClick={handleToggleAttach}
+                                            className={`w-10 h-10 transition-all duration-200 ease-out flex items-center justify-center rounded-full ${
+                                                (showAttachMenu && !isClosingAttach) 
+                                                ? 'text-violet-500 bg-violet-50 dark:bg-slate-800 dark:text-white rotate-45' 
+                                                : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rotate-0'
+                                            }`}
+                                            title="Attach"
                                             disabled={disabled}
                                         >
-                                            <span className="material-symbols-outlined text-[20px]">image</span>
+                                            <span className="material-symbols-outlined text-[24px] leading-[0]">add</span>
                                         </button>
-                                        <input 
-                                            type="file" 
-                                            ref={fileInputRef} 
-                                            accept="image/*" 
-                                            className="hidden" 
-                                            multiple 
-                                            onChange={handleImageChange} 
-                                        />
 
-                                        {/* Attachment Button */}
-                                        <button
-                                            type="button"
-                                            onClick={() => attachmentInputRef.current?.click()}
-                                            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
-                                            title="Attach File"
-                                            disabled={disabled}
-                                        >
-                                            <span className="material-symbols-outlined text-[20px] rotate-45">attach_file</span>
-                                        </button>
-                                        <input 
-                                            type="file" 
-                                            ref={attachmentInputRef} 
-                                            accept="*" 
-                                            className="hidden" 
-                                            multiple 
-                                            onChange={handleFileChange} 
-                                        />
+                                        {showAttachMenu && (
+                                            <div className={`
+                                                absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 
+                                                max-sm:left-0 max-sm:translate-x-0
+                                                ${isClosingAttach ? 'born-out' : 'born-in'}
+                                            `}>
+                                                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/50 rounded-[18px] shadow-2xl p-1.5 sm:p-2 min-w-[160px] sm:min-w-[180px] flex flex-col gap-0.5 sm:gap-1 overflow-hidden">
+                                                    {/* Image Option */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            fileInputRef.current?.click();
+                                                            closeAttachMenu();
+                                                        }}
+                                                        style={{ 
+                                                            animationDelay: isClosingAttach ? '150ms' : '0ms' 
+                                                        }}
+                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                    >
+                                                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-500 grid place-items-center text-white shadow-lg shadow-blue-500/20">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-[18px] sm:h-[18px]">
+                                                                <path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM5 5h14v9.59l-3.29-3.3a1 1 0 00-1.42 0L11 14.59l-2.29-2.3a1 1 0 00-1.42 0L5 14.59V5zm0 14v-2.59l3-3 2.29 2.3a1 1 0 001.42 0L15 12.41l4 4V19H5z"/>
+                                                                <circle cx="8" cy="8" r="1.5"/>
+                                                            </svg>
+                                                        </div>
+                                                        <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">Image</span>
+                                                    </button>
 
-                                        {/* Location Button */}
-                                        {onLocationClick && (
-                                            <button
-                                                type="button"
-                                                onClick={onLocationClick}
-                                                className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
-                                                title="Share Location"
-                                                disabled={disabled}
-                                            >
-                                                <span className="material-symbols-outlined text-[20px]">location_on</span>
-                                            </button>
+                                                    {/* File Option */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            attachmentInputRef.current?.click();
+                                                            closeAttachMenu();
+                                                        }}
+                                                        style={{ 
+                                                            animationDelay: isClosingAttach ? '100ms' : '50ms' 
+                                                        }}
+                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                    >
+                                                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-600 grid place-items-center text-white shadow-lg shadow-indigo-600/20">
+                                                            <span className="material-symbols-outlined text-[18px] sm:text-[20px] rotate-45">attach_file</span>
+                                                        </div>
+                                                        <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">File</span>
+                                                    </button>
+
+                                                    {/* Location Option */}
+                                                    {onLocationClick && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                onLocationClick();
+                                                                closeAttachMenu();
+                                                            }}
+                                                            style={{ 
+                                                                animationDelay: isClosingAttach ? '50ms' : '100ms' 
+                                                            }}
+                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                        >
+                                                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-green-500 grid place-items-center text-white shadow-lg shadow-green-500/20">
+                                                                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">location_on</span>
+                                                            </div>
+                                                            <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">Location</span>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Poll Option */}
+                                                    {onPollClick && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                onPollClick();
+                                                                closeAttachMenu();
+                                                            }}
+                                                            style={{ 
+                                                                animationDelay: isClosingAttach ? '0ms' : '150ms' 
+                                                            }}
+                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                        >
+                                                            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-yellow-500 grid place-items-center text-white shadow-lg shadow-yellow-500/20">
+                                                                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">ballot</span>
+                                                            </div>
+                                                            <span className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">Poll</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
-
-                                        {/* Poll Button */}
-                                        {onPollClick && (
-                                            <button
-                                                type="button"
-                                                onClick={onPollClick}
-                                                className="p-2 text-slate-400 hover:text-violet-500 dark:hover:text-violet-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center rounded-lg"
-                                                title="Create Poll"
-                                                disabled={disabled}
-                                            >
-                                                <span className="material-symbols-outlined text-[20px]">ballot</span>
-                                            </button>
-                                        )}
-                                    </>
+                                    </div>
                                 )}
+
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    accept="image/*" 
+                                    className="hidden" 
+                                    multiple 
+                                    onChange={handleImageChange} 
+                                />
+                                <input 
+                                    type="file" 
+                                    ref={attachmentInputRef} 
+                                    accept="*" 
+                                    className="hidden" 
+                                    multiple 
+                                    onChange={handleFileChange} 
+                                />
                             </div>
                         </div>
                     </div>
