@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 
 import PickerPanel from './PickerPanel';
 import ContentEditable from 'react-contenteditable';
@@ -45,9 +45,15 @@ export default function MessageInput({
 }) {
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
+    const [isClosingEmoji, setIsClosingEmoji] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [isClosingAttach, setIsClosingAttach] = useState(false);
+    const [emojiOffset, setEmojiOffset] = useState(0);
+    const [attachOffset, setAttachOffset] = useState(0);
     const attachMenuRef = useRef(null);
+    const menuContainerRef = useRef(null);
+    const emojiButtonRef = useRef(null);
+    const attachButtonRef = useRef(null);
     
     // [NEW] Mention State
     const [showMentionPopup, setShowMentionPopup] = useState(false);
@@ -316,30 +322,109 @@ export default function MessageInput({
         }
     };
 
+
+    // Memoized closing functions for animations
     const closeAttachMenu = useCallback(() => {
-        setIsClosingAttach(true);
-        setTimeout(() => {
-            setShowAttachMenu(false);
-            setIsClosingAttach(false);
-        }, 350); // Increased to allow staggered exit (max delay 150ms + duration 200ms)
-    }, []);
+        if (showAttachMenu && !isClosingAttach) {
+            setIsClosingAttach(true);
+            setTimeout(() => {
+                setShowAttachMenu(false);
+                setIsClosingAttach(false);
+            }, 350);
+        }
+    }, [showAttachMenu, isClosingAttach]);
+
+    const closeEmojiPicker = useCallback(() => {
+        if (showEmoji && !isClosingEmoji) {
+            setIsClosingEmoji(true);
+            setTimeout(() => {
+                setShowEmoji(false);
+                setIsClosingEmoji(false);
+            }, 300);
+        }
+    }, [showEmoji, isClosingEmoji]);
 
     const handleToggleAttach = () => {
         if (showAttachMenu) {
             closeAttachMenu();
         } else {
+            if (showEmoji) closeEmojiPicker();
             setShowAttachMenu(true);
         }
     };
 
+    const handleToggleEmoji = () => {
+        if (showEmoji) {
+            closeEmojiPicker();
+        } else {
+            if (showAttachMenu) closeAttachMenu();
+            setShowEmoji(true);
+        }
+    };
+
+    // [NEW] Smart Positioning Logic
+    useLayoutEffect(() => {
+        const adjustPosition = () => {
+            const viewportWidth = window.innerWidth;
+            const margin = 12;
+
+            // 1. Emoji Picker
+            if (emojiButtonRef.current && pickerRef.current) {
+                const btnRect = emojiButtonRef.current.getBoundingClientRect();
+                const menuWidth = pickerRef.current.offsetWidth;
+                
+                const menuCenter = btnRect.left + btnRect.width / 2;
+                const menuLeft = menuCenter - menuWidth / 2;
+                const menuRight = menuCenter + menuWidth / 2;
+                
+                let shift = 0;
+                if (menuRight > viewportWidth - margin) {
+                    shift = viewportWidth - margin - menuRight;
+                } else if (menuLeft < margin) {
+                    shift = margin - menuLeft;
+                }
+                setEmojiOffset(shift);
+            }
+
+            // 2. Attach Menu
+            if (attachButtonRef.current && menuContainerRef.current) {
+                const btnRect = attachButtonRef.current.getBoundingClientRect();
+                const menuWidth = menuContainerRef.current.offsetWidth;
+                
+                let shift = 0;
+                if (window.innerWidth >= 640) {
+                    const menuCenter = btnRect.left + btnRect.width / 2;
+                    const menuLeft = menuCenter - menuWidth / 2;
+                    const menuRight = menuCenter + menuWidth / 2;
+                    if (menuRight > viewportWidth - margin) shift = viewportWidth - margin - menuRight;
+                    else if (menuLeft < margin) shift = margin - menuLeft;
+                } else {
+                    const menuLeft = btnRect.left;
+                    if (menuLeft + menuWidth > viewportWidth - margin) shift = viewportWidth - margin - (menuLeft + menuWidth);
+                    else if (menuLeft < margin) shift = margin - menuLeft;
+                }
+                setAttachOffset(shift);
+            }
+        };
+
+        if (showEmoji || showAttachMenu) {
+            adjustPosition();
+            window.addEventListener('resize', adjustPosition);
+            return () => window.removeEventListener('resize', adjustPosition);
+        } else {
+            setEmojiOffset(0);
+            setAttachOffset(0);
+        }
+    }, [showEmoji, showAttachMenu]);
+
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (pickerRef.current && !pickerRef.current.contains(event.target)) {
-                setShowEmoji(false);
-            }
-            if (attachMenuRef.current && !attachMenuRef.current.contains(event.target)) {
-                if (showAttachMenu) closeAttachMenu();
-            }
+            if (showAttachMenu && attachMenuRef.current && !attachMenuRef.current.contains(event.target)) {
+            closeAttachMenu();
+        }
+        if (showEmoji && pickerRef.current && !pickerRef.current.contains(event.target)) {
+            closeEmojiPicker();
+        }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
@@ -957,19 +1042,6 @@ export default function MessageInput({
                                 </div>
                             </div>
                          )}
-                            {showEmoji && (
-                                <div 
-                                    className="fixed bottom-[80px] left-1/2 -translate-x-1/2 z-50 shadow-2xl rounded-lg w-[90vw] h-[400px] sm:w-[400px] sm:absolute sm:bottom-full sm:mb-2 sm:left-auto sm:right-0 sm:translate-x-0 overflow-hidden" 
-                                    ref={pickerRef}
-                                >
-                                    <PickerPanel 
-                                        onEmojiClick={handleEmojiClick}
-                                        onGifClick={handleGifClick}
-                                        disableGifTab={isAi || !!pendingGif}
-                                        onBackspace={handleBackspace}
-                                    />
-                                </div>
-                            )}
                             <ContentEditable
                                 innerRef={editorRef}
                                 html={html}
@@ -993,24 +1065,48 @@ export default function MessageInput({
                             )}
 
                             <div className="pr-2 flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowEmoji(!showEmoji)}
-                                    className={`w-10 h-10 transition-colors flex items-center justify-center rounded-full ${
-                                        showEmoji 
-                                        ? 'text-violet-500 bg-violet-50 dark:bg-slate-800 dark:text-white' 
-                                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                                    }`}
-                                    title="Insert Emoji"
-                                >
-                                    <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
-                                </button>
+                                <div className="relative">
+                                    {showEmoji && (
+                                        <div 
+                                            className={`
+                                                absolute bottom-full left-1/2 mb-4 z-50 
+                                                shadow-2xl rounded-2xl w-[90vw] sm:w-[350px] h-[400px] overflow-hidden
+                                                ${isClosingEmoji ? 'born-out' : 'born-in'}
+                                            `}
+                                            ref={pickerRef}
+                                            style={{ 
+                                                '--menu-tx': `calc(-50% + ${emojiOffset}px)`
+                                            }}
+                                        >
+                                            <PickerPanel 
+                                                onEmojiClick={handleEmojiClick}
+                                                onGifClick={handleGifClick}
+                                                disableGifTab={isAi || !!pendingGif}
+                                                onBackspace={handleBackspace}
+                                            />
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleEmoji}
+                                        ref={emojiButtonRef}
+                                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
+                                            (showEmoji && !isClosingEmoji)
+                                            ? 'text-violet-500 bg-violet-50 dark:bg-slate-800 dark:text-white' 
+                                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                                        }`}
+                                        title="Insert Emoji"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+                                    </button>
+                                </div>
 
                                 {!isAi && (
                                     <div className="relative" ref={attachMenuRef}>
                                         <button
                                             type="button"
                                             onClick={handleToggleAttach}
+                                            ref={attachButtonRef}
                                             className={`w-10 h-10 transition-all duration-200 ease-out flex items-center justify-center rounded-full ${
                                                 (showAttachMenu && !isClosingAttach) 
                                                 ? 'text-violet-500 bg-violet-50 dark:bg-slate-800 dark:text-white rotate-45' 
@@ -1023,11 +1119,17 @@ export default function MessageInput({
                                         </button>
 
                                         {showAttachMenu && (
-                                            <div className={`
-                                                absolute bottom-full left-1/2 -translate-x-1/2 mb-4 z-50 
-                                                max-sm:left-0 max-sm:translate-x-0
-                                                ${isClosingAttach ? 'born-out' : 'born-in'}
-                                            `}>
+                                            <div 
+                                                className={`
+                                                    absolute bottom-full left-1/2 mb-4 z-50 
+                                                    max-sm:left-0 max-sm:translate-x-0
+                                                    ${isClosingAttach ? 'born-out' : 'born-in'}
+                                                `}
+                                                ref={menuContainerRef}
+                                                style={{ 
+                                                    '--menu-tx': window.innerWidth >= 640 ? `calc(-50% + ${attachOffset}px)` : `${attachOffset}px`
+                                                }}
+                                            >
                                                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/50 rounded-[18px] shadow-2xl p-1.5 sm:p-2 min-w-[160px] sm:min-w-[180px] flex flex-col gap-0.5 sm:gap-1 overflow-hidden">
                                                     {/* Image Option */}
                                                     <button
@@ -1039,7 +1141,7 @@ export default function MessageInput({
                                                         style={{ 
                                                             animationDelay: isClosingAttach ? '150ms' : '0ms' 
                                                         }}
-                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
                                                     >
                                                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-blue-500 grid place-items-center text-white shadow-lg shadow-blue-500/20">
                                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-[18px] sm:h-[18px]">
@@ -1060,7 +1162,7 @@ export default function MessageInput({
                                                         style={{ 
                                                             animationDelay: isClosingAttach ? '100ms' : '50ms' 
                                                         }}
-                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                        className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
                                                     >
                                                         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-indigo-600 grid place-items-center text-white shadow-lg shadow-indigo-600/20">
                                                             <span className="material-symbols-outlined text-[18px] sm:text-[20px] rotate-45">attach_file</span>
@@ -1079,7 +1181,7 @@ export default function MessageInput({
                                                             style={{ 
                                                                 animationDelay: isClosingAttach ? '50ms' : '100ms' 
                                                             }}
-                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
                                                         >
                                                             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-green-500 grid place-items-center text-white shadow-lg shadow-green-500/20">
                                                                 <span className="material-symbols-outlined text-[18px] sm:text-[20px]">location_on</span>
@@ -1099,7 +1201,7 @@ export default function MessageInput({
                                                             style={{ 
                                                                 animationDelay: isClosingAttach ? '0ms' : '150ms' 
                                                             }}
-                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
+                                                            className={`w-full flex items-center gap-2.5 p-2 rounded-[12px] hover:bg-slate-100 dark:hover:bg-slate-800 active:bg-slate-200 dark:active:bg-slate-700 transition-colors text-left group ${isClosingAttach ? 'item-out' : 'item-in'}`}
                                                         >
                                                             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-yellow-500 grid place-items-center text-white shadow-lg shadow-yellow-500/20">
                                                                 <span className="material-symbols-outlined text-[18px] sm:text-[20px]">ballot</span>
