@@ -25,7 +25,7 @@ export default function LoadingScreen() {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-600/20 rounded-full blur-[100px] animate-pulse-slow" />
             </div>
 
-            <div className="relative z-10 flex flex-col items-center gap-8 w-full max-w-sm px-6 mx-auto translate-x-3 sm:translate-x-0">
+            <div className="relative z-10 flex flex-col items-center gap-8 w-full max-w-sm px-6 mx-auto">
                 {/* Logo with Glow */}
                 <div className="relative group">
                     <div className="absolute inset-0 bg-violet-500 blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500 rounded-full" />
