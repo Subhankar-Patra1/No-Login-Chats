@@ -51,36 +51,16 @@ export default function LocationPicker({ isOpen, onClose, onSend }) {
             },
             (err) => {
                 console.warn('Geolocation error:', err.message);
-                // Fallback to IP-based location
-                getIpLocation(err);
-            },
-            { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 }
-        );
-    };
-
-    const getIpLocation = async (originalError) => {
-        try {
-            const res = await fetch('https://ipapi.co/json/');
-            if (!res.ok) throw new Error('IP API failed');
-            const data = await res.json();
-            
-            if (data.latitude && data.longitude) {
-                setLocation({ latitude: data.latitude, longitude: data.longitude });
-                setAddress(`${data.city}, ${data.region}, ${data.country_name} (Approx. based on IP)`);
+                let msg = 'Could not get your location. Please try again.';
+                if (err.code === 1) msg = 'Location permission denied. Please enable location access in your browser settings.';
+                else if (err.code === 2) msg = 'Location unavailable. Check your GPS/network or ensure you are on an HTTPS connection.';
+                else if (err.code === 3) msg = 'Location request timed out. Please try again.';
+                
+                setError(msg);
                 setLoading(false);
-            } else {
-                throw new Error('Invalid IP data');
-            }
-        } catch (ipErr) {
-            console.error('IP Fallback failed:', ipErr);
-            // Show original error if fallback fails
-            let msg = 'Could not get your location. Please try again.';
-            if (originalError.code === 1) msg = 'Location permission denied. Please enable location access.';
-            else if (originalError.code === 2) msg = 'Location unavailable. Check your GPS/network.';
-            else if (originalError.code === 3) msg = 'Location request timed out.';
-            setError(msg);
-            setLoading(false);
-        }
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
     };
 
     const handleSend = () => {
