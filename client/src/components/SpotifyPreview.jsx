@@ -80,7 +80,7 @@ export default function SpotifyPreview({ url, isMe }) {
     // If showing embed, show full player
     if (showEmbed) {
         return (
-            <div className={`mt-2 rounded-lg overflow-hidden ${isMe ? 'ml-[-12px] mr-[-12px]' : 'ml-[-12px] mr-[-36px]'} mb-[-8px] w-[340px] sm:w-[400px] ${isMe ? 'bg-black/20' : 'bg-slate-100 dark:bg-slate-900'} ${isClosing ? 'player-out' : 'player-in'}`}>
+            <div className={`mt-2 rounded-lg overflow-hidden ${isMe ? 'ml-[-12px] mr-[-12px]' : 'ml-[-12px] mr-[-36px]'} mb-[-8px] w-[260px] sm:w-[400px] ${isMe ? 'bg-black/20' : 'bg-slate-100 dark:bg-slate-900'} ${isClosing ? 'player-out' : 'player-in'}`}>
                 <iframe
                     src={embedUrl}
                     width="100%"
@@ -104,7 +104,7 @@ export default function SpotifyPreview({ url, isMe }) {
     // Compact preview (WhatsApp style) - thumbnail on right
     return (
         <div 
-            className={`mt-2 rounded-lg overflow-hidden cursor-pointer transition-colors border border-transparent ${isMe ? 'ml-[-12px] mr-[-12px]' : 'ml-[-12px] mr-[-36px]'} mb-[-8px] w-[340px] sm:w-[400px] ${containerClass} ${!isMe ? 'hover:bg-slate-200 dark:hover:bg-slate-800' : 'hover:bg-black/30'} border-opacity-50`}
+            className={`mt-2 rounded-lg overflow-hidden cursor-pointer transition-colors border border-transparent ${isMe ? 'ml-[-12px] mr-[-12px]' : 'ml-[-12px] mr-[-36px]'} mb-[-8px] w-[260px] sm:w-[400px] ${containerClass} ${!isMe ? 'hover:bg-slate-200 dark:hover:bg-slate-800' : 'hover:bg-black/30'} border-opacity-50`}
             onClick={() => setShowEmbed(true)}
         >
             <div className="flex items-center gap-3 p-2">
