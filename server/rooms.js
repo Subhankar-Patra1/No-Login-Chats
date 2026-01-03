@@ -437,7 +437,13 @@ router.get('/', async (req, res) => {
             (SELECT u.display_name FROM users u WHERE u.id = r.created_by) as creator_name,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
-            (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > rm.last_read_at AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $1::integer)) as unread_count,
+            (SELECT COUNT(*) FROM messages m 
+             WHERE m.room_id = r.id 
+             AND m.created_at > rm.last_read_at 
+             AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $1::integer)
+             -- NOTE: This filter is ONLY for unread count calculation. Do NOT reuse for message history queries.
+             AND m.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id = $1::integer)
+            ) as unread_count,
             last_msg.content as last_message_content,
             last_msg.type as last_message_type,
             last_msg.user_id as last_message_sender_id,
@@ -690,6 +696,7 @@ router.get('/:id/media', async (req, res) => {
             AND (m.is_deleted_for_everyone IS FALSE OR m.is_deleted_for_everyone IS NULL)
             AND (m.deleted_for_user_ids IS NULL OR NOT ($2::text = ANY(m.deleted_for_user_ids)))
             AND (m.is_view_once IS FALSE OR m.is_view_once IS NULL)
+            AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $2)
         `;
         
         const params = [roomId, req.user.id];

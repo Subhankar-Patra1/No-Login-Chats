@@ -220,8 +220,10 @@ export default function Dashboard() {
         });
 
         newSocket.on('new_message', (msg) => {
-            // [NEW] Play notification sound
-            if (msg.user_id !== user.id) {
+            const isSilent = msg.meta?.silent;
+
+            // [NEW] Play notification sound (Only if not silent)
+            if (msg.user_id !== user.id && !isSilent) {
                 const audio = new Audio(notificationSound);
                 audio.play().catch(e => console.log("Audio play error:", e));
                 
@@ -266,7 +268,7 @@ export default function Dashboard() {
                         }
                     });
                 }
-            } else {
+            } else if (msg.user_id === user.id) {
                 // [NEW] Play sent sound
                 const audio = new Audio(sentSound);
                 audio.play().catch(e => console.log("Audio play error:", e));
@@ -276,19 +278,19 @@ export default function Dashboard() {
                 let updatedRooms = [...prev];
                 const roomIndex = updatedRooms.findIndex(r => String(r.id) === String(msg.room_id));
                 
-                // [NEW] Emit delivered globally if received (e.g. in sidebar)
-                if (String(msg.user_id) !== String(user.id)) {
-                    console.log('[DEBUG-CLIENT] Emitting global message_delivered for msg:', msg.id);
+                // [NEW] Emit delivered globally if received (e.g. in sidebar) - SKIP IF SILENT
+                if (String(msg.user_id) !== String(user.id) && !isSilent) {
+                    // console.log('[DEBUG-CLIENT] Emitting global message_delivered for msg:', msg.id);
                     newSocket.emit('message_delivered', { messageId: msg.id, roomId: msg.room_id });
                 }
 
                 if (roomIndex > -1) {
                      const room = { ...updatedRooms[roomIndex] };
-                     // Update unread count if not active
-                     if (activeRoomRef.current?.id !== room.id) {
+                     // Update unread count if not active - SKIP IF SILENT
+                     if (activeRoomRef.current?.id !== room.id && !isSilent) {
                          room.unread_count = (room.unread_count || 0) + 1;
                      }
-                     // Update last message preview
+                     // Update last message preview (Always update text)
                      room.last_message_content = msg.content;
                      room.last_message_type = msg.type;
                      room.last_message_sender_id = msg.user_id;
@@ -302,11 +304,19 @@ export default function Dashboard() {
                      room.last_message_is_deleted = msg.is_deleted_for_everyone || false; // [FIX] Reset deleted status for new message
                      room.last_message_poll_question = msg.poll?.question || null; // [NEW] Update poll question for preview
                      room.last_message_attachments_count = msg.attachments?.length || 0; // [NEW] Track attachments count for multi-image preview
-                     room.last_message_at = new Date().toISOString(); // Update timestamp for sorting
+                     
+                     // [MODIFIED] Only update timestamp and re-sort if NOT silent
+                     if (!isSilent) {
+                        room.last_message_at = new Date().toISOString(); 
+                     }
 
                      updatedRooms[roomIndex] = room;
-                     // Re-sort using our helper
-                     return sortRooms(updatedRooms);
+                     
+                     // Re-sort only if we updated timestamp
+                     if (!isSilent) {
+                        return sortRooms(updatedRooms);
+                     }
+                     return updatedRooms;
                 }
                 return updatedRooms;
             });

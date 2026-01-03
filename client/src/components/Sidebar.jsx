@@ -500,6 +500,9 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                             ) :
                                             room.last_message_type === 'image' ? (
                                                 <span className="flex items-center gap-1">
+                                                    {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="shrink-0 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
                                                     {room.last_message_is_view_once ? (
                                                         (room.last_message_viewed_by && room.last_message_viewed_by.length > 0) ? (
                                                              <>
@@ -532,6 +535,9 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                             ) :
                                             room.last_message_type === 'file' ? (
                                                 <span className="flex items-center gap-1">
+                                                    {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="shrink-0 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
                                                     <span className="material-symbols-outlined text-[18px] translate-y-[0.5px] shrink-0">description</span>
                                                         <span className="truncate">
                                                             {room.last_message_file_name || 'File'}
@@ -541,12 +547,29 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                             ) :
                                             room.last_message_type === 'location' ? (
                                                 <span className="flex items-center gap-1">
+                                                    {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="shrink-0 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
                                                     <span className="material-symbols-outlined text-[18px] translate-y-[0.5px] shrink-0">location_on</span>
                                                     <span>Location</span>
                                                 </span>
                                             ) :
-                                            room.last_message_type === 'audio' ? 'Sent an audio' :
-                                            room.last_message_type === 'gif' ? 'Sent a GIF' :
+                                            room.last_message_type === 'audio' ? (
+                                                <span>
+                                                    {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="mr-1 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
+                                                    Sent an audio
+                                                </span>
+                                            ) :
+                                            room.last_message_type === 'gif' ? (
+                                                <span>
+                                                     {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="mr-1 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
+                                                    Sent a GIF
+                                                </span>
+                                            ) :
                                             room.last_message_type === 'poll_vote' ? (
                                                 <span className="flex items-center gap-1">
                                                     <span className="shrink-0">
@@ -576,7 +599,16 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                                     </span>
                                                 </span>
                                             ) :
-                                            renderPreview(room.last_message_content)}
+                                            /* Text & Fallback */
+                                            (
+                                                <span className="flex items-center">
+                                                    {room.type === 'group' && room.last_message_type !== 'system' && room.last_message_sender_id && (
+                                                        <span className="mr-1 shrink-0 inline-flex items-center">{room.last_message_sender_id === user.id ? 'You:' : <>{renderTextWithEmojis(room.last_message_sender_name || 'User')}:</>}</span>
+                                                    )}
+                                                    <span className="truncate">{renderPreview(room.last_message_content)}</span>
+                                                </span>
+                                            )
+                                        }
                                         </span>
                                     </div>
                                 )}
