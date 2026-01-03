@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { linkifyText } from '../utils/linkify';
+import UnreadDivider from './UnreadDivider';
 import { useAuth } from '../context/AuthContext';
 import AudioPlayer from './AudioPlayer';
 import ReactMarkdown from 'react-markdown';
@@ -1336,7 +1337,32 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
     );
 };
 
-export default function MessageList({ messages, setMessages, currentUser, roomId, socket, onReply, onDelete, onRetry, onEdit, onRegenerate, onPin, searchTerm, onLoadMore, loadingMore, hasMore, isAiChat, isSelectionMode, selectedMessageIds, onToggleMessageSelection, onToggleSelectionMode }) { // [MODIFIED] Added props // [MODIFIED] Added onPin
+
+
+export default function MessageList({ 
+    messages, 
+    setMessages, 
+    currentUser, 
+    roomId, 
+    socket, 
+    onReply, 
+    onDelete, 
+    onRetry, 
+    onEdit, 
+    onRegenerate, 
+    onPin, 
+    searchTerm, 
+    onLoadMore, 
+    loadingMore, 
+    hasMore, 
+    isAiChat, 
+    isSelectionMode, 
+    selectedMessageIds, 
+    onToggleMessageSelection, 
+    onToggleSelectionMode,
+    lastReadMessageId, // [NEW]
+    onBottomInView // [NEW]
+}) { // [MODIFIED] Added props // [MODIFIED] Added onPin
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
 
@@ -1504,6 +1530,23 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
     // [NEW] Track last message ID to detect REAL new messages at the bottom
     const prevLastMsgIdRef = useRef(null);
 
+    // [NEW] Intersection Observer for Bottom Detection (Mark Read)
+    useEffect(() => {
+        if (!onBottomInView || !bottomRef.current) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    onBottomInView();
+                }
+            },
+            { threshold: 0.1 } // Trigger when even a little bit of the bottom spacer is visible
+        );
+
+        observer.observe(bottomRef.current);
+        return () => observer.disconnect();
+    }, [onBottomInView]);
+
     useEffect(() => {
         const div = scrollRef.current;
         if (!div) return;
@@ -1663,6 +1706,54 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
         return m.type !== 'poll_vote' && !isDeletedForMe;
     }).length > 0;
 
+    // [NEW] Unread Divider Logic
+    // 1. Sort messages chronologically (safety)
+    const sortedMessages = [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    // 2. Calculate Unread Count (Exclude own messages and system messages)
+    // Only count messages strictly AFTER the lastReadMessageId
+    const unreadMessages = sortedMessages.filter(m => 
+        lastReadMessageId && // Only if we have a baseline
+        (m.id > lastReadMessageId || (typeof m.id === 'string' && m.id.localeCompare(lastReadMessageId) > 0)) && // Handle potential string IDs (UUIDs vs Ints) - assuming numeric or comparable
+        m.user_id !== currentUser.id &&
+        m.type !== 'system'
+    );
+    const unreadCount = unreadMessages.length;
+
+    // 3. Identify insertion point
+    // We want the divider above the VERY FIRST message that is "unread" according to the ID check
+    // visibleMessages is what we map over, so we need to match IDs there.
+    const firstUnreadMsg = unreadMessages[0];
+    const firstUnreadMsgId = firstUnreadMsg ? firstUnreadMsg.id : null;
+
+    // [NEW] Exit Animation State
+    const [exitingDivider, setExitingDivider] = useState(null); // { id, count }
+    const prevUnreadStateRef = useRef({ id: null, count: 0 });
+
+    useEffect(() => {
+        const prev = prevUnreadStateRef.current;
+        
+        // If we had an ID, and now we don't (or it changed to null), trigger exit for the OLD one
+        if (prev.id && !firstUnreadMsgId) {
+             setExitingDivider({ id: prev.id, count: prev.count });
+             const timer = setTimeout(() => {
+                 setExitingDivider(null);
+             }, 2000); // 2s Duration for vaporize effect
+             return () => clearTimeout(timer);
+        }
+        
+        // Update ref
+        if (firstUnreadMsgId) {
+            setExitingDivider(null); // Clear exit state if we have a new active one
+            prevUnreadStateRef.current = { id: firstUnreadMsgId, count: unreadCount };
+        } else {
+            prevUnreadStateRef.current = { id: null, count: 0 };
+        }
+    }, [firstUnreadMsgId, unreadCount]);
+
+    // Optimization: Filter unique visible messages once
+    const visibleMessages = sortedMessages.filter(m => m.type !== 'poll_vote');
+
     return (
         <div 
             className="flex-1 relative min-h-0 group/list"
@@ -1702,8 +1793,9 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                         onGoToMessage={scrollToMessage}
                     />
                 )}
+
                 {hasMessages && (
-                messages.filter(m => m.type !== 'poll_vote').map((msg, index) => {
+                visibleMessages.map((msg, index) => {
                     // [FIX] AI messages might have same user_id but are NOT 'me' for display purposes
                     const isAi = msg.user_id === 'ai-assistant' || msg.author_name === 'Assistant' || (msg.meta && msg.meta.ai) || msg.isStreaming;
                     const isMe = msg.user_id == currentUser.id && !isAi;
@@ -1744,7 +1836,14 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                         }
  
                          return (
-                             <div key={msg.id || index} className="flex justify-center my-6 group/system animate-slide-in-up">
+                            <React.Fragment key={msg.id || index}>
+                                {(unreadCount > 0 && msg.id === firstUnreadMsgId) || (exitingDivider && msg.id === exitingDivider.id) ? (
+                                     <UnreadDivider 
+                                        count={unreadCount > 0 ? unreadCount : (exitingDivider?.count || 0)} 
+                                        isExiting={!firstUnreadMsgId && !!exitingDivider}
+                                     />
+                                 ) : null}
+                             <div className="flex justify-center my-6 group/system animate-slide-in-up">
                                  <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/50 backdrop-blur-sm transition-all hover:bg-white/80 dark:hover:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm">
                                      <span className={`material-symbols-outlined text-[16px] ${textColor}`}>
                                          {icon}
@@ -1767,14 +1866,22 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                                      <span className="text-[10px] text-slate-500 dark:text-slate-600 opacity-0 group-hover/system:opacity-100 transition-opacity ml-2">
                                          {formatTime(msg.created_at)}
                                      </span>
-                                 </div>
+                                     </div>
                              </div>
+                            </React.Fragment>
                          );
                     }
 
                     return (
+                        <React.Fragment key={msg.id || index}>
+                            {(unreadCount > 0 && msg.id === firstUnreadMsgId) || (exitingDivider && msg.id === exitingDivider.id) ? (
+                                    <UnreadDivider 
+                                       count={unreadCount > 0 ? unreadCount : (exitingDivider?.count || 0)} 
+                                       isExiting={!firstUnreadMsgId && !!exitingDivider}
+                                    />
+                                ) : null}
+
                         <MessageItem 
-                            key={msg.id || index} 
                             msg={msg} 
                             isMe={isMe} 
                             onReply={onReply} 
@@ -1794,7 +1901,9 @@ export default function MessageList({ messages, setMessages, currentUser, roomId
                             isSelected={selectedMessageIds?.has(msg.id)}
                             onToggleSelection={onToggleMessageSelection}
                             onEnableSelectionMode={onToggleSelectionMode}
+                            isInMultiSelect={isSelectionMode} // Assuming Prop adjustment if needed, else strict pass
                         />
+                        </React.Fragment>
                     );
                 })
                 )}

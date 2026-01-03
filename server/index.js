@@ -554,6 +554,31 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('chat:mark-read', async ({ chatId, lastReadMessageId }) => {
+        try {
+            // Check membership
+            const memberCheck = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id = $2', [chatId, socket.user.id]);
+            if (memberCheck.rows.length === 0) return;
+
+            await db.query(`
+                UPDATE room_members 
+                SET last_read_message_id = $1, last_read_at = NOW() 
+                WHERE room_id = $2 AND user_id = $3
+            `, [lastReadMessageId, chatId, socket.user.id]);
+
+            // Broadcast to user's other sessions to clear badge/divider
+            io.to(`user:${socket.user.id}`).emit('chat:read-update', { chatId, lastReadMessageId });
+            
+            // Optional: You could update message read status here too, 
+            // but sticking to your prompt, we just track the pointer for the divider logic.
+            // If you want read receipts (blue ticks), you invoke 'mark_seen' separately or merge logic.
+            // For this specific feature (divider), updating room_members is the key.
+
+        } catch (err) {
+            console.error('Error in chat:mark-read:', err);
+        }
+    });
+
     socket.on('typing:start', async ({ roomId }) => {
         try {
             // [MODIFIED] Soft Block: Emit to each member individually, filtering blocked users (Bidirectional)

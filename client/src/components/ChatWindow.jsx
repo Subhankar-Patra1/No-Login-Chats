@@ -141,6 +141,49 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
+    
+    // [NEW] Unread/Divider State
+    const [lastReadMessageId, setLastReadMessageId] = useState(room.last_read_message_id || null);
+    const [isAtBottom, setIsAtBottom] = useState(true); // Default to true unless history loaded? Actually safest is false until confirmed
+    
+    useEffect(() => {
+        setLastReadMessageId(room.last_read_message_id || null);
+    }, [room.last_read_message_id, room.id]);
+
+    useEffect(() => {
+        if (!socket) return;
+        const handleReadUpdate = ({ chatId, lastReadMessageId: newId }) => {
+            if (String(chatId) === String(room.id)) {
+                setLastReadMessageId(newId);
+            }
+        };
+        socket.on('chat:read-update', handleReadUpdate);
+        return () => socket.off('chat:read-update', handleReadUpdate);
+    }, [socket, room.id]);
+
+    const markAsRead = useCallback(() => {
+         if (!messages.length) return;
+         const lastMsg = messages[messages.length - 1];
+         // Only mark if we have a NEWER message than what we last read
+         // and the last message is NOT mine (optional, but good for data cleanliness, though WhatsApp marks mine as read too implicitly)
+         // Actually, simply update the pointer to the latest message ID available.
+         if (lastMsg.id !== lastReadMessageId) {
+             console.log('Marking as read:', lastMsg.id);
+             socket.emit('chat:mark-read', { chatId: room.id, lastReadMessageId: lastMsg.id });
+             // Optimistic update
+             setLastReadMessageId(lastMsg.id);
+         }
+    }, [messages, lastReadMessageId, room.id, socket]);
+
+    // Window Focus Handler
+    useEffect(() => {
+        const handleFocus = () => {
+            if (isAtBottom) markAsRead();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [isAtBottom, markAsRead]);
+
     // [NEW] Delete Selection Modal State
     const [deleteSelectionModal, setDeleteSelectionModal] = useState({ isOpen: false, count: 0, canDeleteForEveryone: false });
 
@@ -158,8 +201,11 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     // [NEW] Refs to access latest values in socket handlers (avoid stale closure)
     const isBlockedByMeRef = useRef(isBlockedByMe);
     const otherUserIdRef = useRef(otherUserId);
+    const isAtBottomRef = useRef(isAtBottom); // [NEW] Track bottom state ref
+    
     useEffect(() => { isBlockedByMeRef.current = isBlockedByMe; }, [isBlockedByMe]);
     useEffect(() => { otherUserIdRef.current = otherUserId; }, [otherUserId]);
+    useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
 
     // Fetch Block Status for Direct Chats (Background Sync)
     useEffect(() => {
@@ -414,6 +460,13 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 // [NEW] Emit delivered
                 if (msg.user_id !== user.id) {
                     socket.emit('message_delivered', { messageId: msg.id, roomId: room.id });
+
+                    // [NEW] Instant Read Logic (Prevent Divider Flash)
+                    // If we are looking at the chat (at bottom) and it's active
+                    if (isAtBottomRef.current && document.visibilityState === 'visible') {
+                        socket.emit('chat:mark-read', { chatId: room.id, lastReadMessageId: msg.id });
+                        setLastReadMessageId(msg.id); // Optimistic update immediately
+                    }
 
                     // [NEW] Show notification if window hidden OR message is for different room (handled by parent typically, but here for active room if hidden)
                     if (document.visibilityState === 'hidden') {
@@ -1879,13 +1932,18 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                             // Show duration modal for pinning
                             setPinToConfirm(msg);
                         }
-                    }}
+                            }}
                     // Selection Props
                     isSelectionMode={isSelectionMode}
                     selectedMessageIds={selectedMessageIds}
                     onToggleMessageSelection={toggleMessageSelection}
-                    onToggleSelectionMode={toggleSelectionMode}
-                    searchTerm={searchTerm} 
+                    onToggleSelectionMode={() => setIsSelectionMode(!isSelectionMode)}
+                    lastReadMessageId={lastReadMessageId} // [NEW]
+                    onBottomInView={() => {
+                        setIsAtBottom(true);
+                        markAsRead();
+                    }}
+                    searchTerm={searchTerm}
                     onLoadMore={handleLoadOlderMessages}
                     hasMore={hasMore}
                     loadingMore={loadingMore}
