@@ -94,7 +94,7 @@ const PrivilegedUsersModal = ({ isOpen, onClose, title, roomId, roleFilter, toke
     );
 };
 
-export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo, isLoading, highlightMessageId, onGoToMessage }) {
+export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, setShowGroupInfo, isLoading, highlightMessageId, onGoToMessage, onRefresh }) {
     const { token } = useAuth();
     const { presenceMap, fetchStatuses } = usePresence();
     const { showNotification } = useNotification();
@@ -112,6 +112,83 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const [pinToConfirm, setPinToConfirm] = useState(null);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
+
+    const [isBlockedByMe, setIsBlockedByMe] = useState(room.is_blocked_by_me || false);
+    const [otherUserId, setOtherUserId] = useState(room.other_user_id || null);
+    const [checkingBlockStatus, setCheckingBlockStatus] = useState(false);
+
+    // [NEW] Refs to access latest values in socket handlers (avoid stale closure)
+    const isBlockedByMeRef = useRef(isBlockedByMe);
+    const otherUserIdRef = useRef(otherUserId);
+    useEffect(() => { isBlockedByMeRef.current = isBlockedByMe; }, [isBlockedByMe]);
+    useEffect(() => { otherUserIdRef.current = otherUserId; }, [otherUserId]);
+
+    // Fetch Block Status for Direct Chats (Background Sync)
+    useEffect(() => {
+        if (room.type === 'direct') {
+            // If we don't have otherUserId from prop, find it
+            if (!otherUserId) {
+                 const fetchMembers = async () => {
+                    try {
+                        const membersRes = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/members`, { 
+                            headers: { Authorization: `Bearer ${token}` } 
+                        });
+                        if (membersRes.ok) {
+                            const members = await membersRes.json();
+                            const otherMember = members.find(m => m.user_id !== user.id); 
+                            if (otherMember) {
+                                setOtherUserId(otherMember.user_id);
+                            }
+                        }
+                    } catch (e) { console.error(e); }
+                 };
+                 fetchMembers();
+            }
+
+            // Sync block status in background (don't show spinner)
+            const fetchBlockStatus = async () => {
+                try {
+                    let targetId = otherUserId || room.other_user_id; 
+                    if (targetId) {
+                        const blockRes = await fetch(`${import.meta.env.VITE_API_URL}/api/users/me/blocked`, { 
+                            headers: { Authorization: `Bearer ${token}` } 
+                        });
+                        if (blockRes.ok) {
+                            const blockedList = await blockRes.json();
+                            const isBlocked = blockedList.some(b => b.id === targetId);
+                            // Only update if different to avoid re-renders
+                            if (isBlocked !== isBlockedByMe) {
+                                setIsBlockedByMe(isBlocked);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to check block status", e);
+                }
+            };
+            fetchBlockStatus();
+        } else {
+            setIsBlockedByMe(false);
+            setOtherUserId(null);
+        }
+    }, [room.id, user.id, room.is_blocked_by_me, room.other_user_id]);
+
+    const handleUnblock = async () => {
+        if (!otherUserId) return;
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/me/unblock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ targetUserId: otherUserId })
+            });
+            if (res.ok) {
+                setIsBlockedByMe(false);
+                if (onRefresh) onRefresh();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const hydrateMessages = (newMsgs, existingMsgs = []) => {
         const all = [...newMsgs, ...existingMsgs];
@@ -289,6 +366,13 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         const handleNewMessage = (msg) => {
             console.log('Received new_message:', msg, 'Current room:', room.id);
             if (String(msg.room_id) === String(room.id)) {
+                
+                // [NEW] Ignore messages from blocked users (use refs for latest value)
+                if (isBlockedByMeRef.current && String(msg.user_id) === String(otherUserIdRef.current)) {
+                    console.log('Ignored message from blocked user');
+                    return; 
+                }
+
                 // [NEW] Emit delivered
                 if (msg.user_id !== user.id) {
                     socket.emit('message_delivered', { messageId: msg.id, roomId: room.id });
@@ -422,6 +506,9 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         const handleTypingStart = ({ room_id, user_id, user_name }) => {
              if (String(room_id) !== String(room.id)) return;
              
+             // [NEW] Ignore if blocked (use refs for latest value)
+             if (isBlockedByMeRef.current && String(user_id) === String(otherUserIdRef.current)) return;
+
              if (typingTimeoutsRef.current[user_id]) {
                  clearTimeout(typingTimeoutsRef.current[user_id]);
              }
@@ -439,6 +526,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
         const handleTypingStop = ({ room_id, user_id }) => {
              if (String(room_id) !== String(room.id)) return;
+             // [NEW] Ignore if blocked (use refs for latest value)
+             if (isBlockedByMeRef.current && String(user_id) === String(otherUserIdRef.current)) return; 
              
              if (typingTimeoutsRef.current[user_id]) {
                  clearTimeout(typingTimeoutsRef.current[user_id]);
@@ -1568,6 +1657,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 </div>
             )}
 
+            {/* Message Input or Block Banner */}
             {canSend ? (
                 <MessageInput 
                     onSend={handleSend}         
@@ -1589,6 +1679,8 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     members={members}
                     currentUser={user}
                     roomId={room.id}
+                    isBlocked={isBlockedByMe}
+                    onUnblock={handleUnblock}
                 />
             ) : (
                 <div className="p-4 bg-transparent z-10 flex justify-center items-center h-[88px] transition-colors duration-300">
@@ -1616,6 +1708,12 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     onActionSuccess={(action) => {
                         if (action === 'delete') {
                             onBack(); // Go back to empty state
+                        } else if (action === 'block') {
+                            setIsBlockedByMe(true);
+                            if (onRefresh) onRefresh();
+                        } else if (action === 'unblock') {
+                            setIsBlockedByMe(false);
+                            if (onRefresh) onRefresh();
                         }
                     }}
                     onGoToMessage={(msgId) => {

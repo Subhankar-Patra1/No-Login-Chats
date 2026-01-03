@@ -475,6 +475,11 @@ export default function Sidebar({ rooms, activeRoom, onSelectRoom, loadingRoomId
                                         </svg>
                                         <span>Locked Chat</span>
                                     </div>
+                                ) : room.is_blocked_by_me ? (
+                                    <div className="text-xs flex items-center gap-1 text-slate-500 dark:text-slate-400 italic min-w-0">
+                                        <span className="material-symbols-outlined text-[16px] shrink-0">block</span>
+                                        <span className="truncate pr-1">You blocked this user</span>
+                                    </div>
                                 ) : (
                                     <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 min-w-0">
                                         {room.last_message_sender_id === user.id && room.type !== 'ai' && (

@@ -309,26 +309,89 @@ router.get('/:id/profile', async (req, res) => {
             AND rm2.user_id = $2
         `, [req.user.id, targetUserId]);
 
+        // Check if I blocked this user
+        const blockRes = await db.query(
+            'SELECT 1 FROM blocked_users WHERE blocker_id = $1 AND blocked_id = $2', 
+            [req.user.id, targetUserId]
+        );
+        const isBlockedByMe = blockRes.rows.length > 0;
+
         res.json({
             id: user.id,
             display_name: user.display_name,
             username: user.username,
             avatar_url: user.avatar_url,
             avatar_thumb_url: user.avatar_thumb_url,
-            bio: user.bio || '', // Ensure bio exists in DB or migration adds it? Assuming it exists or we add it comfortably.
-            // If bio column doesn't exist, we might need a migration for it too.
-            // Let's assume it might not exist and handle graceful failure or add it column.
-            // Wait, existing schema likely has it? PROMPT implies "bio displayed".
-            // I will double check schema or add it if missing in a migration.
-            // For now, let's return it if allowed.
+            bio: user.bio || '',
             last_seen,
-            groups_in_common: groupsRes.rows
+            groups_in_common: groupsRes.rows,
+            is_blocked_by_me: isBlockedByMe
         });
 
     } catch (err) {
         console.error("Get profile error:", err);
-        // If bio column missing error, handled globally 500
         res.status(500).json({ error: "Failed to fetch profile" });
+    }
+});
+
+// Block User
+router.post('/me/block', async (req, res) => {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: 'Target user ID required' });
+    if (String(targetUserId) === String(req.user.id)) return res.status(400).json({ error: 'Cannot block yourself' });
+
+    try {
+        await db.query(`
+            INSERT INTO blocked_users (blocker_id, blocked_id)
+            VALUES ($1, $2)
+            ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+        `, [req.user.id, targetUserId]);
+        
+        // [NEW] Notify blocked user in real-time so their UI can update
+        const io = req.app.get('io');
+        io.to(`user:${targetUserId}`).emit('you_are_blocked', { 
+            blockerId: req.user.id 
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Block user error:", err);
+        res.status(500).json({ error: "Failed to block user" });
+    }
+});
+
+// Unblock User
+router.post('/me/unblock', async (req, res) => {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: 'Target user ID required' });
+
+    try {
+        await db.query(`
+            DELETE FROM blocked_users 
+            WHERE blocker_id = $1 AND blocked_id = $2
+        `, [req.user.id, targetUserId]);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Unblock user error:", err);
+        res.status(500).json({ error: "Failed to unblock user" });
+    }
+});
+
+// Get Blocked Users
+router.get('/me/blocked', async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT u.id, u.username, u.display_name, u.avatar_thumb_url 
+            FROM blocked_users b
+            JOIN users u ON b.blocked_id = u.id
+            WHERE b.blocker_id = $1
+        `, [req.user.id]);
+        
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Get blocked users error:", err);
+        res.status(500).json({ error: "Failed to fetch blocked users" });
     }
 });
 

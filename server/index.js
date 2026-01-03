@@ -327,11 +327,29 @@ io.on('connection', async (socket) => {
                      return socket.emit('error', 'Only owner can send messages');
                 }
 
+                // [NEW] Block check for direct chats
+                let isBlocked = false;
+                let blockerUserId = null;
+                if (room.type === 'direct') {
+                    const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, socket.user.id]);
+                    const otherUserId = otherMemberRes.rows[0]?.user_id;
+                    if (otherUserId) {
+                        const blockCheck = await db.query(
+                            'SELECT blocker_id FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                            [socket.user.id, otherUserId]
+                        );
+                        if (blockCheck.rows.length > 0) {
+                            isBlocked = true;
+                            blockerUserId = parseInt(blockCheck.rows[0].blocker_id, 10);
+                        }
+                    }
+                }
+
                 const insertRes = await db.query(
-                    `INSERT INTO messages (room_id, user_id, content, reply_to_message_id) 
-                     VALUES ($1, $2, $3, $4) 
+                    `INSERT INTO messages (room_id, user_id, content, reply_to_message_id, blocked_for_user_id) 
+                     VALUES ($1, $2, $3, $4, $5) 
                      RETURNING id, status, reply_to_message_id, created_at`,
-                    [roomId, socket.user.id, content, replyToMessageId || null]
+                    [roomId, socket.user.id, content, replyToMessageId || null, blockerUserId || null]
                 );
                 const info = insertRes.rows[0];
                 
@@ -353,6 +371,13 @@ io.on('connection', async (socket) => {
                     avatar_url: user ? user.avatar_url : null,
                     tempId: tempId // Return the tempId to the client
                 };
+
+                // [NEW] If blocked, only emit to sender (not to room)
+                if (isBlocked) {
+                    io.to(`user:${socket.user.id}`).emit('new_message', message);
+                    // Skip the rest of the room notification logic
+                    return;
+                }
 
                 // [FIX] Handle invisible check for room (Logic ported from server/messages.js)
                 const hiddenMembersRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND is_hidden = TRUE', [roomId]);
@@ -438,6 +463,22 @@ io.on('connection', async (socket) => {
                  const validIds = messageIds.filter(id => Number.isInteger(id) || (typeof id === 'string' && /^\d+$/.test(id)));
                  if (validIds.length === 0) return;
 
+                 // [NEW] Check block status for direct chats before marking seen
+                 const roomRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+                 if (roomRes.rows[0]?.type === 'direct') {
+                     const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, socket.user.id]);
+                     const otherUserId = otherMemberRes.rows[0]?.user_id;
+                     if (otherUserId) {
+                         const blockCheck = await db.query(
+                             'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                             [socket.user.id, otherUserId]
+                         );
+                         if (blockCheck.rows.length > 0) {
+                             return; // Do not mark as seen if blocked
+                         }
+                     }
+                 }
+
                  // 1. Get room member count
                  const countRes = await db.query('SELECT count(*) FROM room_members WHERE room_id = $1', [roomId]);
                  const totalMembers = parseInt(countRes.rows[0].count);
@@ -485,6 +526,22 @@ io.on('connection', async (socket) => {
 
     socket.on('message_delivered', async ({ messageId, roomId }) => {
         try {
+            // [NEW] Check block status for direct chats before marking delivered
+            const roomRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+            if (roomRes.rows[0]?.type === 'direct') {
+                const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, socket.user.id]);
+                const otherUserId = otherMemberRes.rows[0]?.user_id;
+                if (otherUserId) {
+                    const blockCheck = await db.query(
+                        'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                        [socket.user.id, otherUserId]
+                    );
+                    if (blockCheck.rows.length > 0) {
+                        return; // Do not mark as delivered if blocked
+                    }
+                }
+            }
+
             // Update delivered_to
             const updateRes = await db.query(`
                 UPDATE messages 
@@ -508,21 +565,62 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('typing:start', ({ roomId }) => {
-        // Broadcast to room excluding sender
-        socket.to(`room:${roomId}`).emit('typing:start', {
-            room_id: roomId,
-            user_id: socket.user.id,
-            user_name: socket.user.display_name || socket.user.username, // Use display name if available
-            timestamp: new Date().toISOString()
-        });
+    socket.on('typing:start', async ({ roomId }) => {
+        try {
+            // [NEW] Check if this is a direct chat and if a block exists
+            const roomRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+            if (roomRes.rows[0]?.type === 'direct') {
+                const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, socket.user.id]);
+                const otherUserId = otherMemberRes.rows[0]?.user_id;
+                if (otherUserId) {
+                    // Check if either user has blocked the other
+                    const blockCheck = await db.query(
+                        'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                        [socket.user.id, otherUserId]
+                    );
+                    if (blockCheck.rows.length > 0) {
+                        return; // Do not emit typing if blocked
+                    }
+                }
+            }
+            
+            // Broadcast to room excluding sender
+            socket.to(`room:${roomId}`).emit('typing:start', {
+                room_id: roomId,
+                user_id: socket.user.id,
+                user_name: socket.user.display_name || socket.user.username,
+                timestamp: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('Error in typing:start:', err);
+        }
     });
 
-    socket.on('typing:stop', ({ roomId }) => {
-        socket.to(`room:${roomId}`).emit('typing:stop', {
-            room_id: roomId,
-            user_id: socket.user.id
-        });
+    socket.on('typing:stop', async ({ roomId }) => {
+        try {
+            // [NEW] Check block status for direct chats
+            const roomRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+            if (roomRes.rows[0]?.type === 'direct') {
+                const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, socket.user.id]);
+                const otherUserId = otherMemberRes.rows[0]?.user_id;
+                if (otherUserId) {
+                    const blockCheck = await db.query(
+                        'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                        [socket.user.id, otherUserId]
+                    );
+                    if (blockCheck.rows.length > 0) {
+                        return; // Do not emit if blocked
+                    }
+                }
+            }
+            
+            socket.to(`room:${roomId}`).emit('typing:stop', {
+                room_id: roomId,
+                user_id: socket.user.id
+            });
+        } catch (err) {
+            console.error('Error in typing:stop:', err);
+        }
     });
     // Removed duplicate disconnect handler as we handled it above in presence block
 

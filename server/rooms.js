@@ -437,7 +437,7 @@ router.get('/', async (req, res) => {
             (SELECT u.display_name FROM users u WHERE u.id = r.created_by) as creator_name,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
             (SELECT u.username FROM users u WHERE u.id = r.created_by) as creator_username,
-            (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > rm.last_read_at) as unread_count,
+            (SELECT COUNT(*) FROM messages m WHERE m.room_id = r.id AND m.created_at > rm.last_read_at AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $1::integer)) as unread_count,
             last_msg.content as last_message_content,
             last_msg.type as last_message_type,
             last_msg.user_id as last_message_sender_id,
@@ -451,7 +451,8 @@ router.get('/', async (req, res) => {
             last_msg.poll_question as last_message_poll_question,
             last_msg.attachments as last_message_attachments,
             last_msg.is_deleted_for_everyone as last_message_is_deleted,
-            gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members
+            gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members,
+            (SELECT COUNT(*) > 0 FROM blocked_users bu WHERE bu.blocker_id = $1::integer AND bu.blocked_id = (SELECT user_id FROM room_members rm2 WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1)) as is_blocked_by_me
             FROM rooms r 
             JOIN room_members rm ON r.id = rm.room_id 
             LEFT JOIN group_permissions gp ON r.id = gp.group_id
@@ -464,6 +465,7 @@ router.get('/', async (req, res) => {
                 WHERE m.room_id = r.id
                 AND m.created_at > COALESCE(rm.cleared_at, '1970-01-01')
                 AND (m.deleted_for_user_ids IS NULL OR NOT ($1::text = ANY(m.deleted_for_user_ids)))
+                AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $1::integer)
                 ORDER BY m.created_at DESC
                 LIMIT 1
             ) last_msg ON true
@@ -547,9 +549,14 @@ router.get('/:id/messages', async (req, res) => {
         
         const params = [roomId, req.user.id];
         
+        // [NEW] Filter out messages permanently marked as blocked for this user
+        // This only filters messages sent DURING block, not messages from before block
+        query += ` AND (m.blocked_for_user_id IS NULL OR m.blocked_for_user_id != $${params.length + 1}::integer)`; 
+        params.push(req.user.id);
+
         // Pagination logic
         if (before) {
-            query += ` AND m.created_at < $3`;
+            query += ` AND m.created_at < $${params.length + 1}`;
             params.push(before);
         }
 

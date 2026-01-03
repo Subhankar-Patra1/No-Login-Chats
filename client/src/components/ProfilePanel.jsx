@@ -417,6 +417,54 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
         }
     };
 
+    const handleBlockUser = async () => {
+        setActionLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/me/block`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({ targetUserId: userId })
+            });
+
+            if (res.ok) {
+                setProfile(prev => ({ ...prev, is_blocked_by_me: true }));
+                setConfirmModal(null);
+                if (onActionSuccess) onActionSuccess('block');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnblockUser = async () => {
+        setActionLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/users/me/unblock`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({ targetUserId: userId })
+            });
+
+            if (res.ok) {
+                setProfile(prev => ({ ...prev, is_blocked_by_me: false }));
+                setConfirmModal(null);
+                if (onActionSuccess) onActionSuccess('unblock');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     if (loading) {
         return createPortal(
             <div className="fixed inset-y-0 right-0 w-full md:w-[360px] bg-white dark:bg-slate-900 shadow-2xl z-[60] flex items-center justify-center border-l border-slate-200 dark:border-slate-800 transition-colors duration-300">
@@ -843,6 +891,7 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                     {/* Actions */}
                     <div className="p-4 space-y-1">
                         {!isMe && (
+                             <>
                              <button 
                                 onClick={onClose}
                                 className="w-full flex items-center gap-4 p-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors text-left group"
@@ -850,6 +899,33 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                                 <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 group-hover:text-violet-500 dark:group-hover:text-violet-400 transition-colors">chat_bubble</span>
                                 <span className="text-sm font-medium">Message</span>
                             </button>
+
+                            <button 
+                                onClick={() => {
+                                    if (profile.is_blocked_by_me) {
+                                         setConfirmModal({ 
+                                            type: 'unblock', 
+                                            title: `Unblock ${profile.display_name}?`, 
+                                            desc: 'They will be able to send you messages.',
+                                            actionReq: handleUnblockUser,
+                                            destructive: false
+                                        });
+                                    } else {
+                                        setConfirmModal({ 
+                                            type: 'block', 
+                                            title: `Block ${profile.display_name}?`, 
+                                            desc: 'Blocked contacts will no longer be able to call you or send you messages.',
+                                            actionReq: handleBlockUser,
+                                            destructive: true
+                                        });
+                                    }
+                                }}
+                                className="w-full flex items-center gap-4 p-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-colors text-left group"
+                            >
+                                <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors">{profile.is_blocked_by_me ? 'lock_open' : 'block'}</span>
+                                <span className="text-sm font-medium">{profile.is_blocked_by_me ? 'Unblock' : 'Block'} User</span>
+                            </button>
+                            </>
                         )}
                        
                         {roomId && (
@@ -968,7 +1044,7 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                                 className={`px-4 py-2 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 ${confirmModal.destructive ? 'bg-red-600 hover:bg-red-500' : 'bg-violet-600 hover:bg-violet-500'} transition-colors disabled:opacity-50`}
                             >
                                 {actionLoading && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}
-                                {confirmModal.type === 'clear' ? 'Clear' : 'Delete'}
+                                {confirmModal.type === 'clear' ? 'Clear' : confirmModal.type === 'delete' || confirmModal.type === 'account_delete' ? 'Delete' : confirmModal.type === 'block' ? 'Block' : 'Unblock'}
                             </button>
                         </div>
                     </div>

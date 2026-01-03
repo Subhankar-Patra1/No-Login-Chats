@@ -82,6 +82,9 @@ const createTables = async () => {
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url TEXT;
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_duration_ms INTEGER;
             ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_waveform TEXT; -- JSON stringified array
+            
+            -- [NEW] Block persistence: messages sent while blocked should never be shown to blocker
+            ALTER TABLE messages ADD COLUMN IF NOT EXISTS blocked_for_user_id INTEGER REFERENCES users(id);
 
             -- Migration for users table (Avatars)
             ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
@@ -153,6 +156,14 @@ const createTables = async () => {
                 passcode_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(room_id, user_id)
+            );
+
+            -- Blocked Users
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                blocker_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                blocked_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (blocker_id, blocked_id)
             );
         `);
         console.log("Tables created successfully");

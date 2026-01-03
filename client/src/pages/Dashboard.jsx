@@ -880,6 +880,7 @@ export default function Dashboard() {
                             setShowGroupInfo={setShowGroupInfo}
                             highlightMessageId={highlightMessageId} // [NEW]
                             onGoToMessage={handleGoToMessage} // [NEW]
+                            onRefresh={fetchRooms} // [NEW] Allow refreshing room list (e.g. after block)
                         />
                     )
                 ) : (

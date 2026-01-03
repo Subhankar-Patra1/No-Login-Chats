@@ -48,6 +48,26 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
         }
         const member = memberRes.rows[0];
 
+        // [MODIFIED] Check Block Status for Direct Chats (set flag instead of reject)
+        let isBlocked = false;
+        let blockerUserId = null; // [NEW] Track who blocked whom
+        const roomTypeRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+        if (roomTypeRes.rows[0]?.type === 'direct') {
+             const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, req.user.id]);
+             const otherUserId = otherMemberRes.rows[0]?.user_id;
+             if (otherUserId) {
+                 const blockCheck = await db.query(
+                     'SELECT blocker_id FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                     [req.user.id, otherUserId]
+                 );
+                 if (blockCheck.rows.length > 0) {
+                     isBlocked = true;
+                     // Identify who is the blocker - they should never see this message
+                     blockerUserId = parseInt(blockCheck.rows[0].blocker_id, 10);
+                 }
+             }
+        }
+
         // Check Permissions (Send Mode)
         const permRes = await db.query('SELECT send_mode FROM group_permissions WHERE group_id = $1', [roomId]);
         const sendMode = permRes.rows[0]?.send_mode || 'everyone';
@@ -62,12 +82,13 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
         const fileName = `${roomId}/${Date.now()}-${req.user.id}.webm`;
         const audioUrl = await uploadFile(file.buffer, fileName, file.mimetype);
 
-        // Insert into DB
+        // Insert into DB (always save, even if blocked)
+        // [MODIFIED] Include blocked_for_user_id to permanently hide from blocker
         const result = await db.query(
-            `INSERT INTO messages (room_id, user_id, type, audio_url, audio_duration_ms, audio_waveform, content, reply_to_message_id) 
-             VALUES ($1, $2, 'audio', $3, $4, $5, 'Voice message', $6) 
+            `INSERT INTO messages (room_id, user_id, type, audio_url, audio_duration_ms, audio_waveform, content, reply_to_message_id, blocked_for_user_id) 
+             VALUES ($1, $2, 'audio', $3, $4, $5, 'Voice message', $6, $7) 
              RETURNING id, status, created_at`,
-            [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null]
+            [roomId, req.user.id, audioUrl, durationMs, waveform, replyToMessageId || null, blockerUserId || null]
         );
         
         // [NEW] Update Room Last Message At
@@ -111,7 +132,13 @@ router.post('/audio', upload.single('audio'), async (req, res) => {
         };
         
         const io = req.app.get('io');
-        io.to(`room:${roomId}`).emit('new_message', message);
+        
+        // [MODIFIED] If blocked, only emit to sender (not broadcast to room)
+        if (isBlocked) {
+            io.to(`user:${req.user.id}`).emit('new_message', message);
+        } else {
+            io.to(`room:${roomId}`).emit('new_message', message);
+        }
 
         res.json(message);
 
@@ -153,6 +180,25 @@ router.post('/image', upload.array('images', 10), async (req, res) => {
         }
         const member = memberRes.rows[0];
 
+        // [MODIFIED] Check Block Status for Direct Chats (set flag instead of reject)
+        let isBlocked = false;
+        let blockerUserId = null;
+        const roomTypeRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+        if (roomTypeRes.rows[0]?.type === 'direct') {
+             const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, req.user.id]);
+             const otherUserId = otherMemberRes.rows[0]?.user_id;
+             if (otherUserId) {
+                 const blockCheck = await db.query(
+                     'SELECT blocker_id FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                     [req.user.id, otherUserId]
+                 );
+                 if (blockCheck.rows.length > 0) {
+                     isBlocked = true;
+                     blockerUserId = parseInt(blockCheck.rows[0].blocker_id, 10);
+                 }
+             }
+        }
+
         // Check Permissions
         const permRes = await db.query('SELECT send_mode FROM group_permissions WHERE group_id = $1', [roomId]);
         const sendMode = permRes.rows[0]?.send_mode || 'everyone';
@@ -187,13 +233,12 @@ router.post('/image', upload.array('images', 10), async (req, res) => {
         // For backward compatibility, use the first image for top-level columns
         const primaryImage = attachments[0];
 
-        // Insert into DB
-        // Insert into DB
+        // Insert into DB with blocked_for_user_id
         const result = await db.query(
-            `INSERT INTO messages (room_id, user_id, type, image_url, image_width, image_height, image_size, content, caption, reply_to_message_id, attachments, is_view_once) 
-             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+            `INSERT INTO messages (room_id, user_id, type, image_url, image_width, image_height, image_size, content, caption, reply_to_message_id, attachments, is_view_once, blocked_for_user_id) 
+             VALUES ($1, $2, 'image', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
              RETURNING id, status, created_at`,
-            [roomId, req.user.id, primaryImage.url, primaryImage.width, primaryImage.height, primaryImage.size, 'Image', caption || '', replyToMessageId || null, JSON.stringify(attachments), isViewOnce === 'true' || isViewOnce === true]
+            [roomId, req.user.id, primaryImage.url, primaryImage.width, primaryImage.height, primaryImage.size, 'Image', caption || '', replyToMessageId || null, JSON.stringify(attachments), isViewOnce === 'true' || isViewOnce === true, blockerUserId || null]
         );
         
         // Update Room Last Message At
@@ -231,7 +276,13 @@ router.post('/image', upload.array('images', 10), async (req, res) => {
         };
         
         const io = req.app.get('io');
-        io.to(`room:${roomId}`).emit('new_message', message);
+        
+        // [MODIFIED] If blocked, only emit to sender
+        if (isBlocked) {
+            io.to(`user:${req.user.id}`).emit('new_message', message);
+        } else {
+            io.to(`room:${roomId}`).emit('new_message', message);
+        }
 
         res.json(message);
 
@@ -260,6 +311,25 @@ router.post('/file', upload.single('file'), async (req, res) => {
         }
         const member = memberRes.rows[0];
 
+        // [MODIFIED] Check Block Status for Direct Chats (set flag instead of reject)
+        let isBlocked = false;
+        let blockerUserId = null;
+        const roomTypeRes = await db.query('SELECT type FROM rooms WHERE id = $1', [roomId]);
+        if (roomTypeRes.rows[0]?.type === 'direct') {
+             const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [roomId, req.user.id]);
+             const otherUserId = otherMemberRes.rows[0]?.user_id;
+             if (otherUserId) {
+                 const blockCheck = await db.query(
+                     'SELECT blocker_id FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                     [req.user.id, otherUserId]
+                 );
+                 if (blockCheck.rows.length > 0) {
+                     isBlocked = true;
+                     blockerUserId = parseInt(blockCheck.rows[0].blocker_id, 10);
+                 }
+             }
+        }
+
         // Check Permissions
         const permRes = await db.query('SELECT send_mode FROM group_permissions WHERE group_id = $1', [roomId]);
         const sendMode = permRes.rows[0]?.send_mode || 'everyone';
@@ -282,13 +352,12 @@ router.post('/file', upload.single('file'), async (req, res) => {
         const fileSize = file.size;
         const mimeType = file.mimetype;
 
-        // Insert into DB
-        // We use the new columns: file_url, file_name, file_size, file_type, file_extension
+        // Insert into DB with blocked_for_user_id
         const result = await db.query(
-            `INSERT INTO messages (room_id, user_id, type, file_url, file_name, file_size, file_type, file_extension, content, caption, reply_to_message_id) 
-             VALUES ($1, $2, 'file', $3, $4, $5, $6, $7, $8, $9, $10) 
+            `INSERT INTO messages (room_id, user_id, type, file_url, file_name, file_size, file_type, file_extension, content, caption, reply_to_message_id, blocked_for_user_id) 
+             VALUES ($1, $2, 'file', $3, $4, $5, $6, $7, $8, $9, $10, $11) 
              RETURNING id, status, created_at`,
-            [roomId, req.user.id, fileUrl, originalName, fileSize, mimeType, ext, 'File', caption || null, replyToMessageId || null]
+            [roomId, req.user.id, fileUrl, originalName, fileSize, mimeType, ext, 'File', caption || null, replyToMessageId || null, blockerUserId || null]
         );
         
         // Update Room Last Message At
@@ -324,7 +393,13 @@ router.post('/file', upload.single('file'), async (req, res) => {
         };
         
         const io = req.app.get('io');
-        io.to(`room:${roomId}`).emit('new_message', message);
+        
+        // [MODIFIED] If blocked, only emit to sender
+        if (isBlocked) {
+            io.to(`user:${req.user.id}`).emit('new_message', message);
+        } else {
+            io.to(`room:${roomId}`).emit('new_message', message);
+        }
 
         res.json(message);
 
@@ -351,6 +426,25 @@ router.post('/', async (req, res) => {
         }
         const member = memberRes.rows[0];
 
+        // [MODIFIED] Check Block Status for Direct Chats (set flag instead of reject)
+        let isBlocked = false;
+        let blockerUserId = null;
+        const roomTypeRes = await db.query('SELECT type FROM rooms WHERE id = $1', [room_id]);
+        if (roomTypeRes.rows[0]?.type === 'direct') {
+             const otherMemberRes = await db.query('SELECT user_id FROM room_members WHERE room_id = $1 AND user_id != $2', [room_id, req.user.id]);
+             const otherUserId = otherMemberRes.rows[0]?.user_id;
+             if (otherUserId) {
+                 const blockCheck = await db.query(
+                     'SELECT blocker_id FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)',
+                     [req.user.id, otherUserId]
+                 );
+                 if (blockCheck.rows.length > 0) {
+                     isBlocked = true;
+                     blockerUserId = parseInt(blockCheck.rows[0].blocker_id, 10);
+                 }
+             }
+        }
+
         // Check Permissions (Send Mode)
         const permRes = await db.query('SELECT send_mode FROM group_permissions WHERE group_id = $1', [room_id]);
         const sendMode = permRes.rows[0]?.send_mode || 'everyone';
@@ -368,33 +462,32 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Room expired' });
         }
 
-        let query = '';
-        let params = [];
-
+        // Build insert query based on type - include blocked_for_user_id
+        let query;
+        let params;
         if (type === 'gif') {
             query = `
-                INSERT INTO messages (room_id, user_id, type, content, gif_url, preview_url, width, height, reply_to_message_id)
-                VALUES ($1, $2, 'gif', $3, $4, $5, $6, $7, $8)
+                INSERT INTO messages (room_id, user_id, type, gif_url, preview_url, width, height, content, reply_to_message_id, blocked_for_user_id) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
                 RETURNING id, status, reply_to_message_id, created_at
             `;
-            params = [room_id, req.user.id, content || 'GIF', gif_url, preview_url, width, height, replyToMessageId || null];
+            params = [room_id, req.user.id, type, gif_url, preview_url, width, height, content || 'GIF', replyToMessageId || null, blockerUserId || null];
         } else if (type === 'location') {
-            // [NEW] Location message handling
             const { latitude, longitude, address } = req.body;
             query = `
-                INSERT INTO messages (room_id, user_id, type, content, latitude, longitude, address, reply_to_message_id)
-                VALUES ($1, $2, 'location', $3, $4, $5, $6, $7)
+                INSERT INTO messages (room_id, user_id, type, content, latitude, longitude, address, reply_to_message_id, blocked_for_user_id) 
+                VALUES ($1, $2, 'location', $3, $4, $5, $6, $7, $8) 
                 RETURNING id, status, reply_to_message_id, created_at
             `;
-            params = [room_id, req.user.id, address || 'Location', latitude, longitude, address || null, replyToMessageId || null];
+            params = [room_id, req.user.id, address || 'Location', latitude, longitude, address || null, replyToMessageId || null, blockerUserId || null];
         } else {
             // Fallback for text
             query = `
-                INSERT INTO messages (room_id, user_id, content, reply_to_message_id) 
-                VALUES ($1, $2, $3, $4) 
+                INSERT INTO messages (room_id, user_id, content, reply_to_message_id, blocked_for_user_id) 
+                VALUES ($1, $2, $3, $4, $5) 
                 RETURNING id, status, reply_to_message_id, created_at
             `;
-            params = [room_id, req.user.id, content, replyToMessageId || null];
+            params = [room_id, req.user.id, content, replyToMessageId || null, blockerUserId || null];
         }
 
         const result = await db.query(query, params);
@@ -510,8 +603,12 @@ router.post('/', async (req, res) => {
             tempId
         };
 
-        // Broadcast
-        io.to(`room:${room_id}`).emit('new_message', message);
+        // [MODIFIED] Broadcast - If blocked, only emit to sender
+        if (isBlocked) {
+            io.to(`user:${req.user.id}`).emit('new_message', message);
+        } else {
+            io.to(`room:${room_id}`).emit('new_message', message);
+        }
 
         res.json(message);
 

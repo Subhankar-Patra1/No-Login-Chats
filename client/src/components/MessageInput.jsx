@@ -41,8 +41,26 @@ export default function MessageInput({
     onStop = () => {},
     members = [],
     currentUser,
-    roomId
+    roomId,
+    isBlocked = false,
+    onUnblock
 }) {
+    if (isBlocked) {
+        return (
+            <div className="p-4 bg-transparent z-10 flex justify-center items-center h-[88px] transition-colors duration-300">
+                <div 
+                    onClick={() => { if(onUnblock) onUnblock(); }}
+                    className="bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 px-6 py-3 rounded-full flex items-center gap-2 border border-red-200 dark:border-red-800 shadow-lg cursor-pointer transition-all"
+                >
+                    <span className="material-symbols-outlined text-red-500 text-sm">lock_open</span>
+                    <span className="text-red-600 dark:text-red-400 text-sm font-medium">
+                        You blocked this user. Tap to unblock.
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
     const [html, setHtml] = useState('');
     const [showEmoji, setShowEmoji] = useState(false);
     const [isClosingEmoji, setIsClosingEmoji] = useState(false);
