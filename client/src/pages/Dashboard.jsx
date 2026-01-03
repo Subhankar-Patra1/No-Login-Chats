@@ -78,9 +78,17 @@ export default function Dashboard() {
     const { pendingUnlockRoom } = useChatLock();
     
     // Resize Logic
-    const [sidebarWidth, setSidebarWidth] = useState(288); // Default w-72 (288px)
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        const saved = localStorage.getItem('sidebar_width');
+        return saved ? parseInt(saved, 10) : 288;
+    }); // Default w-72 (288px)
     const [isResizing, setIsResizing] = useState(false);
     const sidebarRef = useRef(null);
+
+    // Persist width
+    useEffect(() => {
+        localStorage.setItem('sidebar_width', sidebarWidth);
+    }, [sidebarWidth]);
 
     // [NEW] Helper to sort rooms: Pinned first (by pin time), then by last message/creation time
     const sortRooms = (roomsToSort) => {
@@ -116,30 +124,34 @@ export default function Dashboard() {
         canNotifyRef.current = canNotify;
     }, [canNotify]);
 
-    const startResizing = useCallback(() => setIsResizing(true), []);
-    const stopResizing = useCallback(() => setIsResizing(false), []);
-
     const resize = useCallback((mouseMoveEvent) => {
-        if (isResizing) {
-            const newWidth = mouseMoveEvent.clientX;
-            if (newWidth >= 200 && newWidth <= 600) {
-                setSidebarWidth(newWidth);
-            }
+        // Optimization: RequestAnimationFrame could be used here if needed, but setState is usually fast enough
+        const newWidth = mouseMoveEvent.clientX;
+        if (newWidth >= 200 && newWidth <= 600) {
+            setSidebarWidth(newWidth);
         }
-    }, [isResizing]);
+    }, []);
 
-    useEffect(() => {
-        const handleWindowResize = () => {
-            // Force re-render on resize boundaries
-             setSidebarWidth(prev => prev); 
-        };
+    const stopResizing = useCallback(() => {
+        setIsResizing(false);
+        document.body.style.cursor = 'default';
+        window.removeEventListener("mousemove", resize);
+        window.removeEventListener("mouseup", stopResizing);
+    }, [resize]);
+
+    const startResizing = useCallback((e) => {
+        e.preventDefault(); // Prevent text selection
+        setIsResizing(true);
+        document.body.style.cursor = 'col-resize'; // Force cursor on body
         window.addEventListener("mousemove", resize);
         window.addEventListener("mouseup", stopResizing);
-        window.addEventListener("resize", handleWindowResize); // [NEW] Listen to resize
+    }, [resize, stopResizing]);
+
+    // Cleanup on unmount
+    useEffect(() => {
         return () => {
             window.removeEventListener("mousemove", resize);
             window.removeEventListener("mouseup", stopResizing);
-            window.removeEventListener("resize", handleWindowResize);
         };
     }, [resize, stopResizing]);
 
