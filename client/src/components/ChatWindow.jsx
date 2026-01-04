@@ -126,7 +126,13 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     const { showNotification } = useNotification();
     const [showProfileCard, setShowProfileCard] = useState(false);
     
-    const [messages, setMessages] = useState(room.initialMessages || []); 
+    const [messages, setMessages] = useState([]);
+    
+    // [NEW] Chat Hydration Control - Prevents flash of old messages
+    const [isChatReady, setIsChatReady] = useState(false);
+    const activeChatIdRef = useRef(room.id);
+    const hasHydratedRef = useRef(false);
+
     const [isExpired, setIsExpired] = useState(false);
     const [replyTo, setReplyTo] = useState(null); 
     const [editingMessage, setEditingMessage] = useState(null);
@@ -141,6 +147,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
 
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
+    const [chatPreferences, setChatPreferences] = useState({}); // [NEW] Chat Preferences
     
     // [NEW] Unread/Divider State
     const [lastReadMessageId, setLastReadMessageId] = useState(room.last_read_message_id || null);
@@ -342,15 +349,40 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
     // [NEW] Persist Cache (Latest 50)
     useEffect(() => {
         if (messages.length > 0) {
+            // [FIX] Guard against cache corruption: 
+            // Ensure the messages we are saving actually belong to the current room.
+            // This prevents race conditions where stale state from previous room overwrites new room's cache.
+            const sampleMsg = messages[messages.length - 1]; // Check last message
+            if (sampleMsg && String(sampleMsg.room_id) !== String(room.id)) {
+                console.warn('[Cache Guard] Prevented saving mismatched messages to cache', {
+                    currentRoomId: room.id,
+                    messageRoomId: sampleMsg.room_id
+                });
+                return;
+            }
+
             const latest50 = messages.slice(-50);
             localStorage.setItem(`chat_messages_${room.id}`, JSON.stringify(latest50));
         }
     }, [messages, room.id]);
 
-    // Reset Pagination on Room Change
+    // [CRITICAL] Hard Reset on Room Change - Prevents flash of old messages
     useEffect(() => {
+        // Track current room ID for stale response detection
+        activeChatIdRef.current = room.id;
+        
+        // Reset hydration flag for new room
+        hasHydratedRef.current = false;
+        
+        // Hard reset state - NEVER show old messages
+        setIsChatReady(false);
+        setMessages([]);
+        setTypingUsers([]);
         setHasMore(true);
         setLoadingMore(false);
+        
+        // Do NOT call setIsChatReady(true) here!
+        // It will be called only after messages are actually loaded.
     }, [room.id]);
 
     const typingTimeoutsRef = useRef({});
@@ -405,11 +437,109 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         }
     }, [highlightMessageId]);
 
+    // [CRITICAL] Single-Hydration Pattern - Prevents double hydration and scroll jumps
     useEffect(() => {
-        if (room.initialMessages) {
-             setMessages(room.initialMessages);
+        // Guard: Only hydrate once per room
+        if (hasHydratedRef.current) return;
+        
+        // Guard: Must have messages
+        if (!room.initialMessages || room.initialMessages.length === 0) return;
+        
+        // Guard: Must match current room (prevent stale updates)
+        if (String(activeChatIdRef.current) !== String(room.id)) {
+            console.log('[Guard] Ignored stale initialMessages - room mismatch');
+            return;
         }
-    }, [room.initialMessages]);
+        
+        // Validate first message belongs to this room
+        const sample = room.initialMessages[0];
+        if (sample && String(sample.room_id) !== String(room.id)) {
+            console.warn('[Guard] Prevented stale initialMessages - message room_id mismatch');
+            return;
+        }
+
+        // Single hydration - only first valid data wins
+        setMessages(room.initialMessages);
+        hasHydratedRef.current = true;
+        
+        // NOW it's safe to mark as ready (after messages confirmed)
+        requestAnimationFrame(() => {
+            setIsChatReady(true);
+        });
+    }, [room.initialMessages, room.id]);
+
+    // [CRITICAL] Scroll ONLY after chat is ready - prevents scroll jumps
+    const scrolledOnceRef = useRef(false);
+    useEffect(() => {
+        // Reset scroll flag on room change
+        if (!isChatReady) {
+            scrolledOnceRef.current = false;
+            return;
+        }
+        
+        // Only scroll once per room
+        if (scrolledOnceRef.current) return;
+        scrolledOnceRef.current = true;
+        
+        // Use rAF to ensure DOM is painted before scrolling
+        requestAnimationFrame(() => {
+            const messageContainer = document.querySelector('[data-message-list]');
+            if (messageContainer) {
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }
+        });
+    }, [isChatReady]);
+
+    // [NEW] Fetch Chat Preferences & Listen for Updates
+    useEffect(() => {
+        if (!room?.id || !socket) return;
+        
+        const cacheKey = `chat_prefs_${user.id}_${room.id}`;
+
+        // 1. Load from Cache immediately
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                setChatPreferences(JSON.parse(cached));
+            } catch (e) {
+                console.error("Failed to parse cached prefs");
+            }
+        }
+
+        // 2. Fetch Fresh
+        const fetchPreferences = async () => {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/rooms/${room.id}/preferences`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setChatPreferences(data);
+                    // Update Cache
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                }
+            } catch (err) {
+                console.error("Failed to fetch chat preferences", err);
+            }
+        };
+
+        fetchPreferences();
+
+        // Socket Listener
+        const handlePreferencesUpdated = ({ roomId, bubbleColor, wallpaper }) => {
+            if (String(roomId) === String(room.id)) {
+                setChatPreferences(prev => {
+                    const next = { ...prev, bubbleColor, wallpaper };
+                    localStorage.setItem(cacheKey, JSON.stringify(next));
+                    return next;
+                });
+            }
+        };
+
+        socket.on('chat:preferences_updated', handlePreferencesUpdated);
+        return () => socket.off('chat:preferences_updated', handlePreferencesUpdated);
+
+    }, [room?.id, socket, token, user.id]);
 
     // [NEW] Fetch members for mentions
     const [members, setMembers] = useState([]);
@@ -448,14 +578,21 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
         socket.emit('join_room', room.id);
 
         const handleNewMessage = (msg) => {
-            console.log('Received new_message:', msg, 'Current room:', room.id);
-            if (String(msg.room_id) === String(room.id)) {
+            // [CRITICAL] Use ref for latest room ID to prevent stale closure issues
+            if (String(msg.room_id) !== String(activeChatIdRef.current)) {
+                return; // Ignore messages for wrong room
+            }
+            
+            // [CRITICAL] Don't add messages before initial hydration is complete
+            if (!hasHydratedRef.current) {
+                return;
+            }
                 
-                // [NEW] Ignore messages from blocked users (use refs for latest value)
-                if (isBlockedByMeRef.current && String(msg.user_id) === String(otherUserIdRef.current)) {
-                    console.log('Ignored message from blocked user');
-                    return; 
-                }
+            // [NEW] Ignore messages from blocked users (use refs for latest value)
+            if (isBlockedByMeRef.current && String(msg.user_id) === String(otherUserIdRef.current)) {
+                console.log('Ignored message from blocked user');
+                return; 
+            }
 
                 // [NEW] Emit delivered
                 if (msg.user_id !== user.id) {
@@ -543,9 +680,6 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     }
                     return [...prev, processedMsg];
                 });
-            } else {
-                console.log('Message not for this room');
-            }
         };
 
         const handleStatusUpdate = ({ messageIds, status, roomId }) => {
@@ -1899,13 +2033,15 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                 socket={socket}
             />
 
-            {isLoading ? (
+            {/* [CRITICAL] Gate MessageList behind isChatReady to prevent flash */}
+            {(isLoading || !isChatReady) ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 z-10">
                      <span className="material-symbols-outlined text-4xl animate-spin text-violet-500">progress_activity</span>
-                     <p className="text-slate-500 dark:text-slate-400 font-medium animate-pulse">Loading your messages...</p>
+                     <p className="text-slate-500 dark:text-slate-400 font-medium animate-pulse">Loading messages...</p>
                 </div>
             ) : (
                 <MessageList 
+                    key={room.id} /* Force clean remount on room change */
                     messages={messages} 
                     setMessages={setMessages} 
                     currentUser={user} 
@@ -1948,6 +2084,7 @@ export default function ChatWindow({ socket, room, user, onBack, showGroupInfo, 
                     hasMore={hasMore}
                     loadingMore={loadingMore}
                     isAiChat={room.other_user_id === 'ai-assistant' || room.id === 'ai-chat' || room.type === 'ai'}
+                    chatPreferences={chatPreferences} // [NEW]
                 />
             )}
 

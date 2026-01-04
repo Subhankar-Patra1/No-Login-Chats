@@ -12,6 +12,7 @@ import GroupParticipantsView from './GroupParticipantsView';
 import SharedMedia from './SharedMedia'; // [NEW]
 import ImageViewerModal from './ImageViewerModal';
 import GroupOwnershipTransferView from './GroupOwnershipTransferView';
+import ChatColorPicker from './ChatColorPicker'; // [NEW]
 
 export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket, onGoToMessage }) {
     const { token, user: currentUser } = useAuth();
@@ -96,9 +97,41 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
     useEffect(() => {
         if (room.id) {
             setLoading(true);
-            Promise.all([fetchPermissions(), fetchMembers()]).finally(() => setLoading(false));
+            Promise.all([fetchPermissions(), fetchMembers(), fetchPreferences()]).finally(() => setLoading(false));
         }
     }, [room.id]);
+
+    // [NEW] Chat Preferences Logic
+    const [preferences, setPreferences] = useState(null);
+    const fetchPreferences = async () => {
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/preferences`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPreferences(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch preferences", error);
+        }
+    };
+
+    const handleColorChange = async (color) => {
+        // Optimistic update
+        setPreferences(prev => ({ ...prev, bubbleColor: color }));
+        
+        try {
+             await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${room.id}/preferences`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ bubbleColor: color })
+            });
+        } catch (error) {
+            console.error(error);
+            // Revert on failure? For now, keep optimistic.
+        }
+    };
 
     const saveNameSelection = () => {
         const selection = window.getSelection();
@@ -839,6 +872,22 @@ export default function GroupInfoModal({ room, onClose, onLeave, onKick, socket,
                                 )}
                             </div>
                         )}
+                    </div>
+                    
+                    {/* [NEW] Appearance Section */}
+                    <div className="border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
+                        <h3 className="text-slate-500 font-bold text-xs uppercase px-6 pt-6 mb-2 tracking-wider">Appearance</h3>
+                        <div className="px-6 pb-6">
+                            <label className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 block">My Chat Colour</label>
+                            {/* Pass key to force re-render if loaded, but we handle state internally too */}
+                            <ChatColorPicker 
+                                currentColor={preferences?.bubbleColor} 
+                                onChange={handleColorChange}
+                            />
+                            <p className="text-[10px] text-slate-400 mt-2">
+                                Only you will see this color for your messages.
+                            </p>
+                        </div>
                     </div>
                     
                     {/* Shared Media */}

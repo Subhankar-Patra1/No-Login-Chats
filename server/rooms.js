@@ -448,7 +448,7 @@ router.get('/', async (req, res) => {
             last_msg.content as last_message_content,
             last_msg.type as last_message_type,
             last_msg.user_id as last_message_sender_id,
-            last_msg.sender_name as last_message_sender_name, -- [NEW]
+            last_msg.sender_name as last_message_sender_name, 
             last_msg.id as last_message_id,
             last_msg.status as last_message_status,
             last_msg.caption as last_message_caption,
@@ -458,16 +458,28 @@ router.get('/', async (req, res) => {
             last_msg.poll_question as last_message_poll_question,
             last_msg.attachments as last_message_attachments,
             last_msg.is_deleted_for_everyone as last_message_is_deleted,
+            -- [NEW] Rich media metadata for optimistic loading
+            last_msg.audio_url as last_message_audio_url,
+            last_msg.audio_duration_ms as last_message_audio_duration_ms,
+            last_msg.audio_waveform as last_message_audio_waveform,
+            last_msg.image_url as last_message_image_url,
+            last_msg.file_url as last_message_file_url,
+            last_msg.gif_url as last_message_gif_url,
+            last_msg.preview_url as last_message_preview_url,
+            
             gp.send_mode, gp.allow_name_change, gp.allow_description_change, gp.allow_add_members, gp.allow_remove_members,
             (SELECT COUNT(*) > 0 FROM blocked_users bu WHERE bu.blocker_id = $1::integer AND bu.blocked_id = (SELECT user_id FROM room_members rm2 WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1)) as is_blocked_by_me,
             (SELECT COUNT(*) > 0 FROM blocked_users bu WHERE bu.blocked_id = $1::integer AND bu.blocker_id = (SELECT user_id FROM room_members rm2 WHERE rm2.room_id = r.id AND rm2.user_id != $1::integer LIMIT 1)) as is_blocked_by_them,
-            rm.last_read_message_id -- [NEW]
+            rm.last_read_message_id 
             FROM rooms r 
             JOIN room_members rm ON r.id = rm.room_id 
             LEFT JOIN group_permissions gp ON r.id = gp.group_id
             LEFT JOIN LATERAL (
                 SELECT m.content, m.type, m.user_id, m.id, m.status, m.caption, m.file_name, m.is_view_once, m.viewed_by, m.attachments, m.is_deleted_for_everyone, u.display_name as sender_name,
-                       p.question as poll_question
+                       p.question as poll_question,
+                       -- [NEW] Media fields
+                       m.audio_url, m.audio_duration_ms, m.audio_waveform,
+                       m.image_url, m.file_url, m.gif_url, m.preview_url
                 FROM messages m
                 LEFT JOIN users u ON m.user_id = u.id
                 LEFT JOIN polls p ON m.poll_id = p.id
@@ -498,13 +510,22 @@ router.get('/', async (req, res) => {
             last_message_content: r.last_message_content,
             last_message_type: r.last_message_type,
             last_message_sender_id: r.last_message_sender_id,
-            last_message_sender_name: r.last_message_sender_name, // [NEW]
+            last_message_sender_name: r.last_message_sender_name, 
             last_message_status: r.last_message_status,
             last_message_id: r.last_message_id,
             last_message_is_view_once: r.last_message_is_view_once,
             last_message_viewed_by: r.last_message_viewed_by,
             last_message_poll_question: r.last_message_poll_question,
-            last_message_is_deleted: r.last_message_is_deleted, // [NEW] For "This message was deleted"
+            last_message_is_deleted: r.last_message_is_deleted, 
+            // [NEW] Pass through rich media fields
+            last_message_audio_url: r.last_message_audio_url,
+            last_message_audio_duration_ms: r.last_message_audio_duration_ms,
+            last_message_audio_waveform: r.last_message_audio_waveform,
+            last_message_image_url: r.last_message_image_url,
+            last_message_file_url: r.last_message_file_url,
+            last_message_gif_url: r.last_message_gif_url,
+            last_message_preview_url: r.last_message_preview_url,
+
             // [NEW] Count attachments for multi-image preview
             last_message_attachments_count: (() => {
                 if (!r.last_message_attachments) return 0;
@@ -1615,6 +1636,53 @@ router.get('/locks/all', async (req, res) => {
         
         const lockedRoomIds = locksRes.rows.map(r => r.room_id);
         res.json({ lockedRoomIds });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// [NEW] Get Chat Preferences
+router.get('/:id/preferences', async (req, res) => {
+    const roomId = req.params.id;
+    try {
+        const resPrefs = await db.query(
+            'SELECT bubble_color as "bubbleColor", wallpaper FROM user_chat_preferences WHERE user_id = $1 AND room_id = $2',
+            [req.user.id, roomId]
+        );
+        res.json(resPrefs.rows[0] || {}); // Return empty obj if no prefs found (default)
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// [NEW] Update Chat Preferences
+router.post('/:id/preferences', async (req, res) => {
+    const roomId = req.params.id;
+    const { bubbleColor, wallpaper } = req.body;
+
+    try {
+        // Upsert preferences
+        await db.query(`
+            INSERT INTO user_chat_preferences (user_id, room_id, bubble_color, wallpaper, updated_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            ON CONFLICT (user_id, room_id) 
+            DO UPDATE SET 
+                bubble_color = COALESCE(EXCLUDED.bubble_color, user_chat_preferences.bubble_color),
+                wallpaper = COALESCE(EXCLUDED.wallpaper, user_chat_preferences.wallpaper),
+                updated_at = NOW()
+        `, [req.user.id, roomId, bubbleColor || null, wallpaper || null]);
+
+        // Emit to user's devices
+        const io = req.app.get('io');
+        io.to(`user:${req.user.id}`).emit('chat:preferences_updated', {
+            roomId: parseInt(roomId),
+            bubbleColor,
+            wallpaper
+        });
+
+        res.json({ success: true, bubbleColor, wallpaper });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Server error' });

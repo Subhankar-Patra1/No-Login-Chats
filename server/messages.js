@@ -676,7 +676,8 @@ router.delete('/:id/for-everyone', async (req, res) => {
              io.to(`room:${roomRes.rows[0].room_id}`).emit('message_deleted', { 
                  messageId,
                  is_deleted_for_everyone: true,
-                 content: ""
+                 content: "",
+                 roomId: roomRes.rows[0].room_id // [NEW] Include roomId for client cache updates
              });
         }
 

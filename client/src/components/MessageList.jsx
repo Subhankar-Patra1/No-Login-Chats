@@ -86,7 +86,21 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
 };
 
 
-export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate, onPin, searchTerm, scrollToMessage, onImageClick, token, isSelectionMode, isSelected, onToggleSelection, onEnableSelectionMode }) => { // [MODIFIED] Added Selection Props
+// [NEW] Helper for text contrast
+const getContrastColor = (hexColor) => {
+    if (!hexColor) return 'text-white';
+    // Remove hash
+    const hex = hexColor.replace('#', '');
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    // YIQ equation
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return yiq >= 128 ? 'text-slate-900' : 'text-white';
+};
+
+export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone, onRetry, onMarkHeard, onEdit, onImageLoad, onRegenerate, onPin, searchTerm, scrollToMessage, onImageClick, token, isSelectionMode, isSelected, onToggleSelection, onEnableSelectionMode, bubbleColor }) => { // [MODIFIED] Added bubbleColor
  // [MODIFIED] Added onImageClick
     const [showMenu, setShowMenu] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false); // [NEW] Feedback state
@@ -285,12 +299,15 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                         ${(msg.type === 'image' || msg.type === 'gif' || msg.type === 'location') ? 'p-1' : 'px-4 py-3'}
                         shadow-md text-sm leading-relaxed break-all relative overflow-hidden
                         ${isMe 
-                            ? `bg-violet-600 text-white border border-violet-500/50 ${(msg.type === 'gif') ? 'rounded-[10px]' : 'rounded-2xl rounded-tr-sm'} whitespace-pre-wrap` 
+                            ? `bg-violet-600 border border-violet-500/50 ${(msg.type === 'gif') ? 'rounded-[10px]' : 'rounded-2xl rounded-tr-sm'} whitespace-pre-wrap` 
                             : isAi 
                                 ? `bg-white dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 ${(msg.type === 'gif') ? 'rounded-[10px]' : 'rounded-2xl rounded-tl-sm'} border border-purple-200 dark:border-purple-500/30 shadow-purple-500/5 min-w-[200px]` 
                                 : `bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 ${(msg.type === 'gif') ? 'rounded-[10px]' : 'rounded-2xl rounded-tl-sm'} border border-slate-200 dark:border-slate-700 whitespace-pre-wrap`
                         }
-                    `}>
+                        ${isMe ? (bubbleColor ? getContrastColor(bubbleColor) : 'text-white') : ''}
+                    `}
+                    style={isMe && bubbleColor ? { backgroundColor: bubbleColor, borderColor: 'transparent' } : {}}
+                    >
                         {msg.isSkeleton ? (
                             <div className="flex gap-1 py-1">
                                 <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 animate-[bounce_1.4s_infinite_0ms]"></span>
@@ -1361,7 +1378,8 @@ export default function MessageList({
     onToggleMessageSelection, 
     onToggleSelectionMode,
     lastReadMessageId, // [NEW]
-    onBottomInView // [NEW]
+    onBottomInView, // [NEW]
+    chatPreferences // [NEW]
 }) { // [MODIFIED] Added props // [MODIFIED] Added onPin
     const { token } = useAuth();
     const [confirmDeleteMessage, setConfirmDeleteMessage] = useState(null);
@@ -1775,6 +1793,7 @@ export default function MessageList({
             {/* Scrollable Messages Container - only show when there are messages */}
             <div 
                 ref={scrollRef}
+                data-message-list
                 className={`absolute inset-0 p-4 sm:p-6 space-y-1 sm:space-y-1.5 custom-scrollbar z-[1] ${
                     hasMessages ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
                 }`}
@@ -1902,6 +1921,7 @@ export default function MessageList({
                             onToggleSelection={onToggleMessageSelection}
                             onEnableSelectionMode={onToggleSelectionMode}
                             isInMultiSelect={isSelectionMode} // Assuming Prop adjustment if needed, else strict pass
+                            bubbleColor={chatPreferences?.bubbleColor} // [NEW]
                         />
                         </React.Fragment>
                     );

@@ -323,6 +323,16 @@ export default function Dashboard() {
                      room.last_message_poll_question = msg.poll?.question || null; // [NEW] Update poll question for preview
                      room.last_message_attachments_count = msg.attachments?.length || 0; // [NEW] Track attachments count for multi-image preview
                      
+                     // [NEW] Store rich metadata for synthetic message generation (prevent flash)
+                     room.last_message_audio_url = msg.audio_url;
+                     room.last_message_audio_duration_ms = msg.audio_duration_ms;
+                     room.last_message_audio_waveform = msg.audio_waveform;
+                     room.last_message_image_url = msg.image_url;
+                     room.last_message_file_url = msg.file_url;
+                     room.last_message_attachments = msg.attachments; // Store full array for preview
+                     room.last_message_gif_url = msg.gif_url;
+                     room.last_message_preview_url = msg.preview_url;
+                     
                      // [MODIFIED] Only update timestamp and re-sort if NOT silent
                      if (!isSilent) {
                         room.last_message_at = new Date().toISOString(); 
@@ -340,16 +350,39 @@ export default function Dashboard() {
             });
         });
 
-        // [NEW] Handle Message Edit (Updates Sidebar)
+        // [NEW] Handle Message Edit (Updates Sidebar & BACKGROUND CACHE)
         newSocket.on('message_edited', (msg) => {
-            // msg contains: { id, room_id, content, caption, edited_at, edit_version }
+            // 1. Update Inactive Room Cache (Prevent Flash of old content)
+            try {
+                const cacheKey = `chat_messages_${msg.room_id}`;
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    const updatedCache = parsed.map(m => {
+                        if (String(m.id) === String(msg.id)) {
+                             return {
+                                 ...m,
+                                 content: msg.content,
+                                 caption: msg.caption !== undefined ? msg.caption : m.caption,
+                                 edited_at: msg.edited_at,
+                                 edit_version: msg.edit_version
+                             };
+                        }
+                        return m;
+                    });
+                    localStorage.setItem(cacheKey, JSON.stringify(updatedCache));
+                }
+            } catch (e) {
+                console.error("Failed to patch cache for edit", e);
+            }
+
+            // 2. Update Sidebar State (Existing Logic)
             setRooms(prev => {
                 const updatedRooms = [...prev];
                 const roomIndex = updatedRooms.findIndex(r => String(r.id) === String(msg.room_id));
                 
                 if (roomIndex > -1) {
                     const room = { ...updatedRooms[roomIndex] };
-                    
                     // Only update if the edited message IS the last message
                     if (String(room.last_message_id) === String(msg.id)) {
                          room.last_message_content = msg.content;
@@ -364,10 +397,40 @@ export default function Dashboard() {
             });
         });
 
-        // [NEW] Handle message deletion update for sidebar
-        newSocket.on('message_deleted', ({ messageId, is_deleted_for_everyone }) => {
+        // [NEW] Handle message deletion update (Sidebar & BACKGROUND CACHE)
+        newSocket.on('message_deleted', ({ messageId, is_deleted_for_everyone, roomId }) => { // Note: roomId might only come from extended payload, check server
+            
+            // 1. Update Inactive Cache (Best Attempt)
+            // Ideally server sends roomId. If not, we might have to scan all keys or skip?
+            // The logic below assumes we might know the room or we scan. 
+            // WAIT - server/messages.js emits to `room:{roomId}`. Client listener has NO roomId argument usually unless payload has it.
+            // But we are in Dashboard. We don't know which room triggered this unless payload has it.
+            // Let's check server impl. It emits: { messageId, is_deleted_for_everyone: true, content: "" } to room channel.
+            // Socket.IO client doesn't automatically give us the room it came from in the payload unless we put it there.
+            // However, we can scan `rooms` to find which room has this message as last message? No, that's partial.
+            // We can iterate all `chat_messages_*` keys? Expensive.
+            // FIX: I will update server to include `roomId` in delete payload.
+            // Assuming I will do that next, here is the code:
+            if (roomId) {
+                try {
+                     const cacheKey = `chat_messages_${roomId}`;
+                     const cached = localStorage.getItem(cacheKey);
+                     if (cached) {
+                         const parsed = JSON.parse(cached);
+                         const updatedCache = parsed.map(m => {
+                             if (String(m.id) === String(messageId)) {
+                                 return { ...m, is_deleted_for_everyone: true, content: "" };
+                             }
+                             return m;
+                         });
+                         localStorage.setItem(cacheKey, JSON.stringify(updatedCache));
+                     }
+                } catch (e) { console.error(e); }
+            }
+
             if (!is_deleted_for_everyone) return;
             
+            // 2. Update Sidebar
             setRooms(prev => {
                 const updatedRooms = [...prev];
                 // Find if any room has this message as the last message
@@ -799,6 +862,7 @@ export default function Dashboard() {
     const handleSelectRoom = async (room) => {
         if (activeRoom?.id === room.id) return; // Already valid
         
+        const loadingChatId = room.id; // Capture for closure - prevents race conditions
         setLoadingRoomId(room.id);
         
         // 1. Try to load from Cache first for instant open
@@ -808,7 +872,45 @@ export default function Dashboard() {
         if (cached) {
             try {
                 const parsedMessages = JSON.parse(cached);
-                roomWithCache.initialMessages = hydrateMessages(parsedMessages);
+                let hydrationBase = parsedMessages;
+
+                // [OPTIMIZATION] If cache is missing the very latest message (known from sidebar), append it optimistically
+                // This prevents the "flash of old history" effect where the message you just clicked is missing for 200ms
+                if (room.last_message_id && !parsedMessages.find(m => String(m.id) === String(room.last_message_id))) {
+                    const syntheticMessage = {
+                         id: room.last_message_id,
+                         room_id: room.id,
+                         user_id: room.last_message_sender_id,
+                         content: room.last_message_content,
+                         type: room.last_message_type || 'text',
+                         status: room.last_message_status || 'sent',
+                         created_at: room.last_message_at || new Date().toISOString(),
+                         caption: room.last_message_caption,
+                         file_name: room.last_message_file_name,
+                         is_view_once: room.last_message_is_view_once,
+                         viewed_by: room.last_message_viewed_by || [],
+                         // Use display_name from room metadata or fallback
+                         display_name: room.last_message_sender_name || 'User',
+                         username: room.last_message_sender_name || 'User', // Fallback
+                         is_pinned: false,
+                         reactions: [],
+                         // Attachments (if available in future metadata, for now empty or standard)
+                         attachments: room.last_message_attachments || [], 
+                         poll: room.last_message_poll_question ? { question: room.last_message_poll_question } : null,
+                         
+                         // [NEW] Map rich metadata
+                         audio_url: room.last_message_audio_url,
+                         audio_duration_ms: room.last_message_audio_duration_ms,
+                         audio_waveform: room.last_message_audio_waveform,
+                         image_url: room.last_message_image_url,
+                         file_url: room.last_message_file_url,
+                         gif_url: room.last_message_gif_url,
+                         preview_url: room.last_message_preview_url
+                    };
+                    hydrationBase = [...parsedMessages, syntheticMessage];
+                }
+
+                roomWithCache.initialMessages = hydrateMessages(hydrationBase);
             } catch (e) {
                 console.error("Cache parse error", e);
             }
@@ -830,11 +932,18 @@ export default function Dashboard() {
                 const data = await res.json();
                 const hydrated = hydrateMessages(data);
                 
+                // [CRITICAL] Guard against stale API responses during rapid switching
+                if (String(loadingChatId) !== String(activeRoomRef.current?.id)) {
+                    console.log('[Guard] Ignoring stale API response for room', loadingChatId);
+                    return;
+                }
+                
                 // Update Cache
                 localStorage.setItem(`chat_messages_${room.id}`, JSON.stringify(hydrated));
                 
                 // Update State
                 setActiveRoom(prev => {
+                    // Only update if user hasn't switched rooms again
                     if (prev && String(prev.id) === String(room.id)) {
                         return { ...prev, initialMessages: hydrated };
                     }

@@ -179,6 +179,17 @@ const createTables = async () => {
                 last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- [NEW] User Chat Preferences (Colour, Wallpaper)
+            CREATE TABLE IF NOT EXISTS user_chat_preferences (
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+                bubble_color TEXT,
+                wallpaper TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, room_id)
+            );
         `);
         console.log("Tables created successfully");
     } catch (err) {

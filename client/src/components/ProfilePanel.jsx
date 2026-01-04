@@ -13,6 +13,7 @@ import { renderTextWithEmojis, renderTextWithEmojisToHtml } from '../utils/emoji
 import SharedMedia from './SharedMedia';
 import ImageViewerModal from './ImageViewerModal';
 import LinkedDevices from './LinkedDevices';
+import ChatColorPicker from './ChatColorPicker'; // [NEW]
 
 
 const timeAgo = (dateString) => {
@@ -342,6 +343,37 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
             setLoading(false);
         }
     }, [userId, token]);
+
+    // [NEW] Chat Preferences for DM
+    const [preferences, setPreferences] = useState(null);
+    useEffect(() => {
+        if (roomId && token) {
+            fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${roomId}/preferences`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if(data) setPreferences(data);
+            })
+            .catch(err => console.error("Failed to fetch preferences", err));
+        }
+    }, [roomId, token]);
+
+    const handleColorChange = async (color) => {
+        if (!roomId) return;
+        setPreferences(prev => ({ ...prev, bubbleColor: color }));
+        
+        try {
+             await fetch(`${import.meta.env.VITE_API_URL}/api/rooms/${roomId}/preferences`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ bubbleColor: color })
+            });
+            // Socket handles UI update elsewhere too
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     // Handle Esc key
     useEffect(() => {
@@ -855,6 +887,23 @@ export default function ProfilePanel({ userId, roomId, onClose, onActionSuccess,
                             </>
                         )}
                     </div>
+
+                    {/* [NEW] Appearance Section (Only if in a chat context) */}
+                    {roomId && (
+                        <div className="border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
+                            <h3 className="text-slate-500 font-bold text-xs uppercase px-4 pt-4 mb-1 tracking-wider">Appearance</h3>
+                            <div className="px-4 pb-4">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-2 block">My Chat Colour</label>
+                                <ChatColorPicker 
+                                    currentColor={preferences?.bubbleColor} 
+                                    onChange={handleColorChange}
+                                />
+                                <p className="text-[10px] text-slate-400 mt-2">
+                                    Only you will see this color for your messages.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Shared Media */}
                     <div className="border-b border-slate-200/50 dark:border-slate-800/50 transition-colors">
