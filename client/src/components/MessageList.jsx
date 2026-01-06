@@ -21,7 +21,7 @@ import { NoMessages } from './EmptyState';
 import { renderMusicPreviews, hasMusicLinks } from '../utils/musicLinkDetector';
 import MessageInfoModal from './MessageInfoModal';
 import BigAnimatedEmoji from './BigAnimatedEmoji'; // [NEW]
-import { linkToBigEmoji, isSingleEmoji } from '../utils/animatedEmojiMap'; // [NEW]
+import { linkToBigEmoji, isSingleEmoji, splitEmojis } from '../utils/animatedEmojiMap'; // [NEW]
 
 const formatDuration = (ms) => {
     if (!ms) return '0:00';
@@ -487,23 +487,30 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                             )}
                             </>
                         ) : ((linkToBigEmoji(msg.content) || isSingleEmoji(msg.content)) && !msg.replyTo) ? (
-                            // Big emoji display - either animated or native large
-                            <div className="p-2">
-                                {linkToBigEmoji(msg.content) ? (
-                                    <BigAnimatedEmoji 
-                                        url={linkToBigEmoji(msg.content)} 
-                                        alt={msg.content} 
-                                        size={128}
-                                    />
-                                ) : (
-                                    // Native big emoji (no animation available)
-                                    <span 
-                                        className="select-none block text-center leading-none"
-                                        style={{ fontSize: '80px' }}
-                                    >
-                                        {msg.content}
-                                    </span>
-                                )}
+                            // Big emoji display - render each emoji separately
+                            <div className="p-2 flex gap-1 flex-wrap">
+                                {splitEmojis(msg.content).map((emoji, idx) => (
+                                    linkToBigEmoji(emoji) ? (
+                                        <BigAnimatedEmoji 
+                                            key={idx}
+                                            url={linkToBigEmoji(emoji)} 
+                                            alt={emoji} 
+                                            size={splitEmojis(msg.content).length > 1 ? 96 : 128}
+                                        />
+                                    ) : (
+                                        // Native big emoji for ones without animation
+                                        <span 
+                                            key={idx}
+                                            className="select-none leading-none drop-shadow-md"
+                                            style={{ 
+                                                fontSize: splitEmojis(msg.content).length > 1 ? '60px' : '80px',
+                                                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))'
+                                            }}
+                                        >
+                                            {emoji}
+                                        </span>
+                                    )
+                                ))}
                             </div>
                         ) : msg.type === 'image' ? (
                             msg.is_view_once ? (

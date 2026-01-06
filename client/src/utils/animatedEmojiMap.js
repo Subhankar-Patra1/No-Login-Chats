@@ -936,3 +936,18 @@ export const isSingleEmoji = (content) => {
     // Fallback: rough estimate based on string length (less accurate)
     return trimmed.length <= 14; // Most emojis are 2-4 chars, 3 emojis max ~12 chars
 }
+
+// Split emoji content into individual emojis for separate rendering
+export const splitEmojis = (content) => {
+    if (!content) return [];
+    const trimmed = content.trim();
+    if (!trimmed) return [];
+    
+    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+        return [...segmenter.segment(trimmed)].map(s => s.segment);
+    }
+    
+    // Fallback - basic split (less accurate for complex emojis)
+    return [...trimmed];
+}
