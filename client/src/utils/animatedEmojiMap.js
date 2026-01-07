@@ -3,7 +3,8 @@ export const BASE_URL = '/Telegram-Animated-Emojis';
 // Helper to strip variation selectors (VS16 - \uFE0F) for consistent matching
 const normalize = (str) => {
     if (!str) return '';
-    return str.replace(/\uFE0F/g, ''); 
+    // Strip VS15/VS16 (\uFE0E, \uFE0F), skin tones (\uD83C\uDFFB-1F3FF), and ZWJ (\u200D)
+    return str.replace(/[\uFE0E\uFE0F\u200D\uD83C\uDFFB-\uD83C\uDFFF]/g, ''); 
 };
 
 // Map keys should be normalized (no VS16)
@@ -35,16 +36,14 @@ export const ANIMATED_EMOJIS = {
     [normalize("😶")]: `${BASE_URL}/Smileys/Face%20Without%20Mouth.webp`,
     [normalize("🙄")]: `${BASE_URL}/Smileys/Face%20With%20Rolling%20Eyes.webp`,
     [normalize("😏")]: `${BASE_URL}/Smileys/Smirking%20Face.webp`,
-    [normalize("persevere")]: `${BASE_URL}/Smileys/Persevering%20Face.webp`,
+    [normalize("😣")]: `${BASE_URL}/Smileys/Persevering%20Face.webp`,
     [normalize("😥")]: `${BASE_URL}/Smileys/Sad%20But%20Relieved%20Face.webp`,
     [normalize("😮")]: `${BASE_URL}/Smileys/Face%20With%20Open%20Mouth.webp`,
-    [normalize("zipper_mouth")]: `${BASE_URL}/Smileys/Zipper-Mouth%20Face.webp`, // Correct key if needed? Keeping consistent with usage
     [normalize("🤐")]: `${BASE_URL}/Smileys/Zipper-Mouth%20Face.webp`,
     [normalize("😯")]: `${BASE_URL}/Smileys/Hushed%20Face.webp`,
     [normalize("😪")]: `${BASE_URL}/Smileys/Sleepy%20Face.webp`,
     [normalize("😫")]: `${BASE_URL}/Smileys/Tired%20Face.webp`,
-    [normalize("😴")]: `${BASE_URL}/Smileys/Sleeping%20Face.webp`, // unicode sleeping
-    [normalize("sleeping")]: `${BASE_URL}/Smileys/Sleeping%20Face.webp`,
+    [normalize("😴")]: `${BASE_URL}/Smileys/Sleeping%20Face.webp`,
     [normalize("😌")]: `${BASE_URL}/Smileys/Relieved%20Face.webp`,
     [normalize("😛")]: `${BASE_URL}/Smileys/Face%20With%20Tongue.webp`,
     [normalize("😜")]: `${BASE_URL}/Smileys/Winking%20Face%20With%20Tongue.webp`,
@@ -928,7 +927,10 @@ export const isSingleEmoji = (content) => {
     // Count grapheme clusters (visual characters) using Intl.Segmenter if available
     if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
-        const segments = [...segmenter.segment(trimmed)];
+        const Allsegments = [...segmenter.segment(trimmed)];
+        
+        // Filter out whitespace segments
+        const segments = Allsegments.filter(seg => seg.segment.trim().length > 0);
         
         // Allow 1-3 emojis for big display
         if (segments.length < 1 || segments.length > 3) return false;
@@ -949,9 +951,11 @@ export const splitEmojis = (content) => {
     
     if (typeof Intl !== 'undefined' && Intl.Segmenter) {
         const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
-        return [...segmenter.segment(trimmed)].map(s => s.segment);
+        return [...segmenter.segment(trimmed)]
+            .map(s => s.segment)
+            .filter(seg => seg.trim().length > 0);
     }
     
-    // Fallback - basic split (less accurate for complex emojis)
-    return [...trimmed];
+    // Fallback - basic split and filter spaces
+    return [...trimmed].filter(c => c.trim().length > 0);
 }
