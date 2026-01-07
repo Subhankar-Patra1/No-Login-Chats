@@ -1,4 +1,9 @@
-export const BASE_URL = (import.meta.env?.BASE_URL || '/').replace(/\/$/, '') + '/Telegram-Animated-Emojis';
+const getBaseUrl = () => {
+    const base = import.meta.env?.BASE_URL || '/';
+    return (base.endsWith('/') ? base : base + '/') + 'Telegram-Animated-Emojis';
+};
+
+export const BASE_URL = getBaseUrl();
 
 // Helper to strip variation selectors (VS15/VS16), skin tones, and ZWJ
 const normalize = (str) => {
