@@ -1,9 +1,10 @@
-export const BASE_URL = '/Telegram-Animated-Emojis';
+export const BASE_URL = (import.meta.env?.BASE_URL || '/').replace(/\/$/, '') + '/Telegram-Animated-Emojis';
 
-// Helper to strip variation selectors (VS16 - \uFE0F) for consistent matching
+// Helper to strip variation selectors (VS15/VS16), skin tones, and ZWJ
 const normalize = (str) => {
     if (!str) return '';
     // Strip VS15/VS16 (\uFE0E, \uFE0F), skin tones (\u{1F3FB}-\u{1F3FF}), and ZWJ (\u200D)
+    // Using a more compatible regex construction
     return str.replace(/[\uFE0E\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu, ''); 
 };
 

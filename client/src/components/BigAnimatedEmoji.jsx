@@ -26,7 +26,6 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
         img.onload = () => {
             try {
                 const canvas = document.createElement('canvas');
-                // Use a high resolution for the capture
                 const captureSize = Math.max(img.naturalWidth, img.naturalHeight, size * 2);
                 canvas.width = captureSize;
                 canvas.height = captureSize;
@@ -38,12 +37,13 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
                 frameCache.set(url, dataUrl);
                 setStaticFrame(dataUrl);
             } catch (e) {
-                console.error("Failed to capture frame", e);
+                // Silently fail frame capture, fallback to animated WebP
             } finally {
                 setIsReady(true);
             }
         };
         img.onerror = () => {
+            console.error(`Failed to load animated emoji: ${url}`);
             setError(true);
             setIsReady(true);
         };
