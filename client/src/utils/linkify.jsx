@@ -41,7 +41,7 @@ const SpoilerText = ({ children, keyProp, rawContent, disableBigEmoji }) => {
         <span
             key={keyProp}
             className={`spoiler-message ${revealed ? 'spoiler-revealed' : ''} ${isBigEmoji ? 'inline-flex items-center gap-1' : ''}`}
-            style={isBigEmoji ? { padding: '4px 8px', borderRadius: '12px' } : {}}
+            style={isBigEmoji ? { padding: '8px', borderRadius: '12px' } : {}}
             onClick={(e) => {
                 e.stopPropagation();
                 if (!revealed) setRevealed(true); // Only reveal, never re-hide
