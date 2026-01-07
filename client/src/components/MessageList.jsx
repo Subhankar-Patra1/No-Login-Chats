@@ -1012,9 +1012,11 @@ export const MessageItem = ({ msg, isMe, onReply, onDelete, onDeleteForEveryone,
                         
                         {isMe && (
                             <div className={`absolute flex items-center gap-1 ${
-                                ((linkToBigEmoji(msg.content) || (splitEmojis(msg.content).length >= 1 && splitEmojis(msg.content).length <= 3 && isSingleEmoji(msg.content)) || isSpoilerOnlyEmojis(msg.content)) && !msg.replyTo)
-                                    ? 'bottom-1 right-0 bg-black/30 backdrop-blur-[2px] rounded-full px-1.5 py-0.5 text-white/90 shadow-sm'
-                                    : 'bottom-0.5 right-1.5 text-violet-200/80 drop-shadow-md'
+                                (isSpoilerOnlyEmojis(msg.content) && !msg.replyTo)
+                                    ? 'bottom-2 right-2 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]'
+                                    : ((linkToBigEmoji(msg.content) || (splitEmojis(msg.content).length >= 1 && splitEmojis(msg.content).length <= 3 && isSingleEmoji(msg.content))) && !msg.replyTo)
+                                        ? 'bottom-1 right-0 bg-black/30 backdrop-blur-[2px] rounded-full px-1.5 py-0.5 text-white/90 shadow-sm'
+                                        : 'bottom-0.5 right-1.5 text-violet-200/80 drop-shadow-md'
                             }`}>
                                 {msg.status === 'sending' && msg.type !== 'image' && <span className="material-symbols-outlined text-[10px] animate-spin">progress_activity</span>}
                                 {msg.status === 'error' && (
