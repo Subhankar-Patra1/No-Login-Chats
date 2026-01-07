@@ -4,7 +4,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/No-Login-Chats/', // Ensure correct path resolution for production subfolder
   plugins: [
     react(),
     VitePWA({
