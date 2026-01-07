@@ -7,16 +7,17 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
     const [error, setError] = useState(false);
     const [isPlaying, setIsPlaying] = useState(autoPlay);
     const [staticFrame, setStaticFrame] = useState(() => frameCache.get(url) || null);
+    const [isReady, setIsReady] = useState(() => frameCache.has(url));
     const timerRef = useRef(null);
     const [animKey, setAnimKey] = useState(0);
-    const [isImageLoaded, setIsImageLoaded] = useState(false);
 
-    const ANIMATION_DURATION = 3000;
+    const ANIMATION_DURATION = 3000; // Play for 3 seconds
 
     // Capture first frame
     useEffect(() => {
         if (frameCache.has(url)) {
             setStaticFrame(frameCache.get(url));
+            setIsReady(true);
             return;
         }
 
@@ -25,6 +26,7 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
         img.onload = () => {
             try {
                 const canvas = document.createElement('canvas');
+                // Use a high resolution for the capture
                 const captureSize = Math.max(img.naturalWidth, img.naturalHeight, size * 2);
                 canvas.width = captureSize;
                 canvas.height = captureSize;
@@ -36,17 +38,21 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
                 frameCache.set(url, dataUrl);
                 setStaticFrame(dataUrl);
             } catch (e) {
-                // Silently fail frame capture
+                console.error("Failed to capture frame", e);
+            } finally {
+                setIsReady(true);
             }
         };
-        img.onerror = () => setError(true);
+        img.onerror = () => {
+            setError(true);
+            setIsReady(true);
+        };
         img.src = url;
     }, [url, size]);
 
-    // Handle animation lifecycle
+    // Handle animation duration
     useEffect(() => {
         if (isPlaying) {
-            setIsImageLoaded(false); // Reset load state for new animation
             if (timerRef.current) clearTimeout(timerRef.current);
             timerRef.current = setTimeout(() => {
                 setIsPlaying(false);
@@ -58,8 +64,21 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
     }, [isPlaying, animKey]);
 
     const handleRestart = () => {
-        setAnimKey(prev => prev + 1);
-        setIsPlaying(true);
+        // Preload the next animation frame to prevent flickering
+        const nextAnimKey = animKey + 1;
+        const nextUrl = `${url}${url.includes('?') ? '&' : '?'}anim=${nextAnimKey}`;
+        
+        const img = new Image();
+        img.onload = () => {
+            setAnimKey(nextAnimKey);
+            setIsPlaying(true);
+        };
+        img.onerror = () => {
+             // If preload fails, just try to play anyway
+            setAnimKey(nextAnimKey);
+            setIsPlaying(true);
+        };
+        img.src = nextUrl;
     };
 
     if (error) {
@@ -79,33 +98,43 @@ const BigAnimatedEmoji = ({ url, alt, size = 160, autoPlay = true }) => {
         );
     }
 
+    if (!isReady && isPlaying) {
+        // Show animated while loading if possible, or nothing
+        return (
+            <img 
+                src={url}
+                alt={alt}
+                className="select-none drop-shadow-md object-contain"
+                style={{ width: `${size}px`, height: `${size}px` }}
+                draggable="false"
+            />
+        );
+    }
+
     return (
         <div 
-            className="cursor-pointer select-none active:scale-95 transition-transform relative"
+            className="cursor-pointer select-none active:scale-95 transition-transform"
             style={{ width: `${size}px`, height: `${size}px` }}
             onClick={handleRestart}
             title="Click to play animation"
         >
-            {/* Always show static frame or placeholder as background to prevent white flash */}
-            <img 
-                src={staticFrame || url}
-                alt={alt}
-                className="absolute inset-0 select-none drop-shadow-md object-contain"
-                style={{ width: '100%', height: '100%' }}
-                draggable="false"
-            />
-
-            {/* Overlay animated version when playing */}
-            {isPlaying && (
+            {isPlaying ? (
                 <img 
                     key={animKey}
                     src={`${url}${url.includes('?') ? '&' : '?'}anim=${animKey}`}
                     alt={alt}
-                    className={`absolute inset-0 select-none drop-shadow-md object-contain transition-opacity duration-75 ${isImageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                    style={{ width: '100%', height: '100%' }}
+                    className="select-none drop-shadow-md object-contain"
+                    style={{ width: `${size}px`, height: `${size}px` }}
                     draggable="false"
-                    onLoad={() => setIsImageLoaded(true)}
                     onError={() => setError(true)}
+                />
+            ) : (
+                <img 
+                    src={staticFrame || url}
+                    alt={alt}
+                    className="select-none drop-shadow-md object-contain"
+                    style={{ width: `${size}px`, height: `${size}px` }}
+                    draggable="false"
                 />
             )}
         </div>
