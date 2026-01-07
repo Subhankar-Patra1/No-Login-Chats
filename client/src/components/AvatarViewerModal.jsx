@@ -40,47 +40,10 @@ export default function AvatarViewerModal({
         hasInitialized.current = true;
 
         if (!sourceRect) {
-            // Fallback: just do a simple fade in if no source rect
-            setImageStyle({
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                width: Math.min(window.innerWidth * 0.9, window.innerHeight * 0.85),
-                height: Math.min(window.innerWidth * 0.9, window.innerHeight * 0.85),
-                borderRadius: '16px',
-                transform: 'translate(-50%, -50%)',
-                opacity: 1
-            });
-            setPhase('open');
-            return;
-        }
-
-        // Set initial style synchronously - positioned at source, hidden
-        setImageStyle({
-            position: 'fixed',
-            top: sourceRect.top,
-            left: sourceRect.left,
-            width: sourceRect.width,
-            height: sourceRect.height,
-            borderRadius: '50%',
-            transform: 'none',
-            opacity: 1,
-            transition: 'none'
-        });
-        setPhase('entering');
-    }, [sourceRect]);
-
-    // Animate to open state after initial position is set
-    useEffect(() => {
-        if (phase !== 'entering') return;
-
-        // Use a small timeout to ensure the initial style is painted first
-        const timer = setTimeout(() => {
+            // Fallback: simple fade in
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const maxWidth = viewportWidth * 0.9;
-            const maxHeight = viewportHeight * 0.85;
-            const finalSize = Math.min(maxWidth, maxHeight);
+            const finalSize = Math.min(viewportWidth * 0.9, viewportHeight * 0.85);
 
             setImageStyle({
                 position: 'fixed',
@@ -91,18 +54,74 @@ export default function AvatarViewerModal({
                 borderRadius: '16px',
                 transform: 'translate(-50%, -50%)',
                 opacity: 1,
-                transition: 'all 0.35s cubic-bezier(0.32, 0.72, 0, 1)'
+                willChange: 'transform, opacity'
             });
             setPhase('open');
-        }, 20);
+            return;
+        }
 
-        return () => clearTimeout(timer);
+        // FLIP Calculation
+        // 1. Final State (Dest)
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const maxWidth = viewportWidth * 0.9;
+        const maxHeight = viewportHeight * 0.85;
+        const finalSize = Math.min(maxWidth, maxHeight);
+
+        // 2. Dest Center
+        const destCenterX = viewportWidth / 2;
+        const destCenterY = viewportHeight / 2;
+
+        // 3. Source Center & Deltas
+        const sourceCenterX = sourceRect.left + sourceRect.width / 2;
+        const sourceCenterY = sourceRect.top + sourceRect.height / 2;
+
+        const deltaX = sourceCenterX - destCenterX;
+        const deltaY = sourceCenterY - destCenterY;
+
+        const scaleX = sourceRect.width / finalSize;
+        const scaleY = sourceRect.height / finalSize;
+
+        // 4. Set Initial State (Inverted)
+        // Position at center (final layout), but transformed to look like source
+        setImageStyle({
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            width: finalSize,
+            height: finalSize,
+            borderRadius: '50%', // Source is circle
+            // Translate to center first (-50%, -50%), then apply FLIP delta, then scale
+            // Note: scale applies from center, so translation is safe
+            transform: `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px)) scale(${scaleX}, ${scaleY})`,
+            opacity: 1,
+            transition: 'none',
+            willChange: 'transform, border-radius'
+        });
+        setPhase('entering');
+    }, [sourceRect]);
+
+    // Animate to open state using RAF
+    useEffect(() => {
+        if (phase !== 'entering') return;
+
+        // Double RAF to ensure browser has painted the initial state
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setImageStyle(prev => ({
+                    ...prev,
+                    borderRadius: '16px',
+                    transform: 'translate(-50%, -50%) scale(1)',
+                    transition: 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.35s cubic-bezier(0.32, 0.72, 0, 1)'
+                }));
+                setPhase('open');
+            });
+        });
     }, [phase]);
 
     const handleClose = () => {
         if (phase === 'exiting') return;
         
-        // Reset zoom before closing
         if (scale !== 1) {
             setScale(1);
             setPosition({ x: 0, y: 0 });
@@ -115,26 +134,62 @@ export default function AvatarViewerModal({
 
         setPhase('exiting');
         
+        // Recalculate for exit (window might have resized)
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const maxWidth = viewportWidth * 0.9;
+        const maxHeight = viewportHeight * 0.85;
+        const finalSize = Math.min(maxWidth, maxHeight); // Current size of modal
+
+        // Target (Source)
+        const destCenterX = viewportWidth / 2;
+        const destCenterY = viewportHeight / 2;
+        const sourceCenterX = sourceRect.left + sourceRect.width / 2;
+        const sourceCenterY = sourceRect.top + sourceRect.height / 2;
+
+        const deltaX = sourceCenterX - destCenterX;
+        const deltaY = sourceCenterY - destCenterY;
+        const scaleX = sourceRect.width / finalSize;
+        const scaleY = sourceRect.height / finalSize;
+        
         // Animate back to source
         setImageStyle({
             position: 'fixed',
-            top: sourceRect.top,
-            left: sourceRect.left,
-            width: sourceRect.width,
-            height: sourceRect.height,
+            top: '50%',
+            left: '50%',
+            width: finalSize,
+            height: finalSize,
             borderRadius: '50%',
-            transform: 'none',
+            transform: `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px)) scale(${scaleX}, ${scaleY})`,
             opacity: 1,
-            transition: 'all 0.28s cubic-bezier(0.32, 0.72, 0, 1)'
+            transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+            willChange: 'transform, border-radius'
         });
         
-        // Close after animation
         setTimeout(() => {
             onClose();
         }, 280);
     };
 
     // Mouse wheel zoom
+    // ... (rest of wheel/input handlers)
+    
+    // Key handlers need to be outside the replaced block or re-added?
+    // The previous view showed handleWheel starts at line 138.
+    // My replacement replaces lines 38 to 263.
+    // Line 138 IS inside the block.
+    // I need to include the handlers in the replacement or split the tool call.
+    // The tool call `replace_file_content` replaces a CONTIGUOUS block.
+    // I must include all the code I am essentially rewriting or "skipping over" if I delete it.
+    // But I don't want to delete the handlers.
+    // I should probably use `multi_replace_file_content` or just include them in the `ReplacementContent`.
+    // Wait, the block I am replacing IS huge (lines 38 to 263).
+    // The handlers (wheel, double click, drag, touch, keyboard) are INSIDE this range.
+    // I MUST preserve them.
+    // I will include them in my replacement string.
+
+    // ... Copying handlers ...
+
     const handleWheel = (e) => {
         if (phase !== 'open') return;
         e.preventDefault();
@@ -143,21 +198,14 @@ export default function AvatarViewerModal({
         setScale(prev => {
             const delta = e.deltaY > 0 ? -0.15 : 0.15;
             const newScale = Math.min(Math.max(1, prev + delta), 5);
-            
-            // Reset position when zooming back to 1
-            if (newScale === 1) {
-                setPosition({ x: 0, y: 0 });
-            }
-            
+            if (newScale === 1) setPosition({ x: 0, y: 0 });
             return newScale;
         });
     };
 
-    // Double click/tap to toggle zoom
     const handleDoubleClick = (e) => {
         if (phase !== 'open') return;
         e.stopPropagation();
-        
         if (scale > 1) {
             setScale(1);
             setPosition({ x: 0, y: 0 });
@@ -166,7 +214,6 @@ export default function AvatarViewerModal({
         }
     };
 
-    // Mouse drag for panning
     const handleMouseDown = (e) => {
         if (phase !== 'open' || scale <= 1) return;
         e.preventDefault();
@@ -189,7 +236,6 @@ export default function AvatarViewerModal({
         setIsDragging(false);
     };
 
-    // Touch handlers for pinch zoom and pan
     const getDistance = (touches) => {
         return Math.hypot(
             touches[0].clientX - touches[1].clientX,
@@ -201,12 +247,10 @@ export default function AvatarViewerModal({
         if (phase !== 'open') return;
 
         if (e.touches.length === 2) {
-            // Pinch start
             const dist = getDistance(e.touches);
             touchRef.current.lastDist = dist;
             touchRef.current.isPinching = true;
         } else if (e.touches.length === 1) {
-            // Check for double tap
             const now = Date.now();
             if (now - lastTapTime.current < 300) {
                 handleDoubleClick(e);
@@ -215,7 +259,6 @@ export default function AvatarViewerModal({
             }
             lastTapTime.current = now;
 
-            // Pan start
             if (scale > 1) {
                 touchRef.current.startX = e.touches[0].clientX - position.x;
                 touchRef.current.startY = e.touches[0].clientY - position.y;
@@ -235,9 +278,7 @@ export default function AvatarViewerModal({
 
             setScale(prev => {
                 const newScale = Math.min(Math.max(1, prev + delta), 5);
-                if (newScale === 1) {
-                    setPosition({ x: 0, y: 0 });
-                }
+                if (newScale === 1) setPosition({ x: 0, y: 0 });
                 return newScale;
             });
         } else if (e.touches.length === 1 && isDragging && scale > 1) {
@@ -253,7 +294,6 @@ export default function AvatarViewerModal({
         setIsDragging(false);
     };
 
-    // Keyboard handler
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') handleClose();
